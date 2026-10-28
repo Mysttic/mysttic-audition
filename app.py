@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ctypes
 import json
+import mimetypes
 import os
 import queue
 import re
@@ -29,7 +30,7 @@ import imageio_ffmpeg
 import numpy as np
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
@@ -49,7 +50,8 @@ SR = 16_000            # częstotliwość próbkowania wejścia Whispera
 PEAKS_PER_SEC = 200    # rozdzielczość przebiegu fali
 CPU_THREADS = max(1, (os.cpu_count() or 8) // 2)
 MODELS = ("large-v3-turbo", "small", "medium", "large-v3")
-LANGUAGES = ("pl", "auto", "en", "de", "uk", "ru", "cs", "sk", "fr", "es", "it")
+LANGUAGES = ("auto", "en", "pl", "de", "uk", "ru", "cs", "sk", "fr", "es", "it")
+UI_LANGUAGES = ("en", "pl")  # język interfejsu: słowniki static/i18n/<kod>.json
 # katalogi pamięci podręcznej Hugging Face w models/, z których faster-whisper wczytuje modele
 MODEL_REPOS = {
     "large-v3-turbo": "mobiuslabsgmbh--faster-whisper-large-v3-turbo",
@@ -70,6 +72,22 @@ COPY_EXT = {
 
 # faster_whisper (a z nim huggingface_hub) importujemy dopiero przy transkrypcji.
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+# Moduły ES i słowniki JSON wymagają właściwego typu, a rejestr Windows potrafi podać inny.
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("application/json", ".json")
+
+
+def problem(code: str, **details) -> dict:
+    """Komunikat dla użytkownika jako kod, który tłumaczy interfejs (klucze error.* w static/i18n)."""
+    return {"code": code, **details}
+
+
+class AppError(Exception):
+    """Błąd z komunikatem dla użytkownika: kod i szczegóły jak w problem()."""
+
+    def __init__(self, code: str, **details) -> None:
+        super().__init__(code, details)
+        self.problem = problem(code, **details)
 
 
 # ---------- metadane plików ----------
@@ -105,7 +123,7 @@ def edit_meta(fid: str, change) -> dict:
 
 def file_dir(fid: str) -> Path:
     if not ID_RE.fullmatch(fid) or not meta_path(fid).is_file():
-        raise HTTPException(404, "Nie ma takiego pliku w bibliotece.")
+        raise HTTPException(404, problem("file_not_found"))
     return DATA / fid
 
 
@@ -123,12 +141,12 @@ def probe(path: Path) -> dict:
     try:
         container = av.open(str(path))
     except av.error.FFmpegError as exc:
-        raise ValueError(f"Nie rozpoznano pliku audio ani wideo ({exc}).") from exc
+        raise AppError("unrecognized", detail=str(exc)[:600]) from exc
     with container:
         streams = list(container.streams)
         audio = [s for s in streams if s.type == "audio"]
         if not audio:
-            raise ValueError("Plik nie zawiera ścieżki dźwiękowej.")
+            raise AppError("no_audio")
         cc = audio[0].codec_context
         fmt = cc.format.name if cc.format else ""
         lossless = cc.name.startswith("pcm_") or cc.name in LOSSLESS
@@ -173,10 +191,10 @@ def prepare(fid: str) -> None:
             (d / original_name).unlink(missing_ok=True)
             result = ffmpeg("-i", str(src), *proxy, *pcm)
             if result.returncode != 0:
-                raise RuntimeError(result.stderr.strip()[-600:] or "ffmpeg zakończył się błędem.")
+                raise AppError("ffmpeg", detail=result.stderr.strip()[-600:] or f"exit code {result.returncode}")
         samples = np.fromfile(d / "pcm16k.raw", dtype="<i2")
         if samples.size == 0:
-            raise ValueError("Ścieżka dźwiękowa jest pusta.")
+            raise AppError("empty_audio")
         write_peaks(samples, d / "peaks.u8")
         src.unlink()  # przesłana kopia nie jest już potrzebna, oryginał użytkownika zostaje u niego
 
@@ -190,7 +208,8 @@ def prepare(fid: str) -> None:
         edit_meta(fid, ready)
         JOBS.put(fid)
     except Exception as exc:
-        edit_meta(fid, lambda meta: meta.update(status="error", error=str(exc)[:600]))
+        error = exc.problem if isinstance(exc, AppError) else problem("unexpected", detail=str(exc)[:600])
+        edit_meta(fid, lambda meta: meta.update(status="error", error=error))
 
 
 # ---------- transkrypcja ----------
@@ -248,7 +267,8 @@ def worker() -> None:
             transcribe(fid)
         except Exception as exc:  # błąd jednego pliku nie zatrzymuje kolejki
             if meta_path(fid).is_file():
-                edit_meta(fid, lambda m: m["transcript"].update(status="error", phase=None, error=str(exc)[:600]))
+                error = problem("transcription", detail=str(exc)[:600] or type(exc).__name__)
+                edit_meta(fid, lambda m: m["transcript"].update(status="error", phase=None, error=error))
         finally:
             LIVE.pop(fid, None)
 
@@ -259,8 +279,7 @@ def recover() -> None:
     metas = sorted((load_meta(p.parent.name) for p in DATA.glob("*/meta.json")), key=lambda m: m["created"])
     for meta in metas:
         if meta["status"] == "processing":
-            edit_meta(meta["id"], lambda m: m.update(
-                status="error", error="Przygotowanie przerwane przez zamknięcie aplikacji. Dodaj plik ponownie."))
+            edit_meta(meta["id"], lambda m: m.update(status="error", error=problem("interrupted")))
         elif meta["status"] == "ready" and meta["transcript"]["status"] in ("queued", "running"):
             edit_meta(meta["id"], lambda m: m["transcript"].update(status="queued", phase=None))
             JOBS.put(meta["id"])
@@ -270,12 +289,12 @@ def recover() -> None:
 
 def check_options(model: str, language: str) -> None:
     if model not in MODELS or language not in LANGUAGES:
-        raise HTTPException(400, "Nieznany model lub język.")
+        raise HTTPException(400, problem("bad_option"))
 
 
 def safe_stem(name: str) -> str:
     stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", Path(name).stem).strip(" .")
-    return stem[:60] or "nagranie"
+    return stem[:60] or "recording"
 
 
 def stamp(t: float) -> str:
@@ -304,8 +323,10 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 @app.get("/", include_in_schema=False)
-def index() -> FileResponse:
-    return FileResponse(STATIC / "index.html")
+def index() -> HTMLResponse:
+    # język interfejsu od razu w <html lang>, żeby okno nie mignęło tekstami w innym języku
+    html = (STATIC / "index.html").read_text("utf-8")
+    return HTMLResponse(html.replace('<html lang="en"', f'<html lang="{load_settings()["ui_language"]}"', 1))
 
 
 @app.get("/api/files")
@@ -321,10 +342,10 @@ def list_files() -> list[dict]:
 
 
 @app.put("/api/files")
-async def upload(request: Request, model: str = MODELS[0], language: str = "pl") -> dict:
+async def upload(request: Request, model: str = MODELS[0], language: str = "auto") -> dict:
     """Przyjmuje surową zawartość pliku (nazwa w nagłówku X-Filename) i zapisuje ją strumieniowo."""
     check_options(model, language)
-    name = Path(unquote(request.headers.get("x-filename", ""))).name or "nagranie"
+    name = Path(unquote(request.headers.get("x-filename", ""))).name or "recording"
     suffix = Path(name).suffix.lower()
     if not re.fullmatch(r"\.[a-z0-9]{1,8}", suffix):
         suffix = ""
@@ -341,7 +362,7 @@ async def upload(request: Request, model: str = MODELS[0], language: str = "pl")
                 out.write(chunk)
                 size += len(chunk)
         if size == 0:
-            raise HTTPException(400, "Plik jest pusty.")
+            raise HTTPException(400, problem("empty_file"))
     except BaseException:
         shutil.rmtree(d, ignore_errors=True)
         raise
@@ -366,11 +387,11 @@ def delete_file(fid: str) -> dict:
     d = file_dir(fid)
     meta = load_meta(fid)
     if meta["status"] == "processing" or meta["transcript"]["status"] == "running":
-        raise HTTPException(409, "Plik jest właśnie przetwarzany. Spróbuj po zakończeniu.")
+        raise HTTPException(409, problem("busy"))
     try:
         shutil.rmtree(d)
     except OSError as exc:
-        raise HTTPException(409, f"Nie udało się usunąć wszystkich danych ({exc.strerror}). Spróbuj ponownie.")
+        raise HTTPException(409, problem("delete_failed", reason=exc.strerror))
     return {"deleted": fid}
 
 
@@ -409,9 +430,9 @@ def retranscribe(fid: str, req: TranscribeRequest) -> dict:
     with _meta_lock:
         meta = load_meta(fid)
         if meta["status"] != "ready":
-            raise HTTPException(409, "Plik nie jest jeszcze gotowy.")
+            raise HTTPException(409, problem("not_ready"))
         if meta["transcript"]["status"] in ("queued", "running"):
-            raise HTTPException(409, "Transkrypcja tego pliku już trwa.")
+            raise HTTPException(409, problem("already_transcribing"))
         (d / "transcript.json").unlink(missing_ok=True)
         meta = edit_meta(fid, lambda m: m.update(
             transcript={"status": "queued", "model": req.model, "language": req.language}))
@@ -424,24 +445,24 @@ def export(fid: str, start: float, end: float, mode: str = "wav") -> FileRespons
     d = file_dir(fid)
     meta = load_meta(fid)
     if meta["status"] != "ready":
-        raise HTTPException(409, "Plik nie jest jeszcze gotowy.")
+        raise HTTPException(409, problem("not_ready"))
     start, end = max(0.0, start), min(end, meta["duration"])
     if end - start < 0.01:
-        raise HTTPException(400, "Fragment jest za krótki.")
+        raise HTTPException(400, problem("fragment_too_short"))
     if mode == "wav":
         # Podgląd FLAC to bezstratnie zdekodowany oryginał, więc cięcie jest dokładne co do próbki.
         source, ext = d / "proxy.flac", "wav"
         codec = ["-c:a", "pcm_s24le" if meta["audio"]["bits"] == 24 else "pcm_s16le"]
     elif mode == "copy":
         if not meta.get("has_original"):
-            raise HTTPException(409, "Tej ścieżki nie da się przyciąć bez ponownego kodowania. Użyj WAV.")
+            raise HTTPException(409, problem("no_copy"))
         # Kopia oryginalnych ramek: dane bez zmian, granice cięcia z dokładnością do ramki kodeka.
         # PCM nie ma ramek, więc te same próbki zapisane tym samym kodekiem dają cięcie co do próbki.
         original_codec = meta["audio"]["codec"]
         source, ext = d / meta["original"], COPY_EXT.get(original_codec, "mka")
         codec = ["-c:a", original_codec if original_codec.startswith("pcm_") else "copy"]
     else:
-        raise HTTPException(400, "Nieznany tryb eksportu.")
+        raise HTTPException(400, problem("bad_mode"))
     out_dir = d / "exports"
     out_dir.mkdir(exist_ok=True)
     out = out_dir / f"{secrets.token_hex(4)}.{ext}"
@@ -449,7 +470,7 @@ def export(fid: str, start: float, end: float, mode: str = "wav") -> FileRespons
                     "-map", "0:a:0", *codec, str(out))
     if result.returncode != 0:
         out.unlink(missing_ok=True)
-        raise HTTPException(500, "Eksport nie powiódł się: " + result.stderr.strip()[-400:])
+        raise HTTPException(500, problem("export_failed", detail=result.stderr.strip()[-400:]))
     name = f"{safe_stem(meta['name'])}_{stamp(start)}-{stamp(end)}.{ext}"
     return FileResponse(out, filename=name, background=BackgroundTask(out.unlink, missing_ok=True))
 
@@ -461,7 +482,7 @@ UPDATER: updates.Updater | None = None  # tworzony przy starcie, gdy wiadomo, w 
 
 def updater() -> updates.Updater:
     if UPDATER is None:
-        raise HTTPException(503, "Aktualizacje nie są jeszcze gotowe.")
+        raise HTTPException(503, problem("updates_not_ready"))
     return UPDATER
 
 
@@ -473,7 +494,7 @@ def get_version() -> dict:
 # ---------- ustawienia i dane ----------
 
 SETTINGS_FILE = DATA / "ustawienia.json"  # w folderze danych, a nie w profilu WebView2, więc nie zależy od portu
-DEFAULT_SETTINGS = {"model": MODELS[0], "language": "pl", "follow": True}
+DEFAULT_SETTINGS = {"ui_language": "en", "model": MODELS[0], "language": "auto", "follow": True}
 _settings_lock = threading.Lock()
 
 
@@ -484,10 +505,13 @@ def load_settings() -> dict:
         settings.update({key: value for key, value in stored.items() if key in DEFAULT_SETTINGS})
     except (OSError, ValueError, AttributeError):
         pass
+    if settings["ui_language"] not in UI_LANGUAGES:  # trafia do HTML-a, więc tylko znane kody
+        settings["ui_language"] = DEFAULT_SETTINGS["ui_language"]
     return settings
 
 
 class SettingsUpdate(BaseModel):
+    ui_language: str | None = None
     model: str | None = None
     language: str | None = None
     follow: bool | None = None
@@ -504,6 +528,8 @@ def save_settings(req: SettingsUpdate) -> dict:
         settings = load_settings()
         settings.update(req.model_dump(exclude_none=True))
         check_options(settings["model"], settings["language"])
+        if settings["ui_language"] not in UI_LANGUAGES:
+            raise HTTPException(400, problem("bad_option"))
         DATA.mkdir(exist_ok=True)
         SETTINGS_FILE.write_text(json.dumps(settings), "utf-8")
     return settings
@@ -554,7 +580,7 @@ class FolderRequest(BaseModel):
 def open_folder(req: FolderRequest) -> dict:
     path = {"data": DATA, "models": MODELS_DIR}.get(req.folder)
     if path is None:
-        raise HTTPException(400, "Nieznany folder.")
+        raise HTTPException(400, problem("bad_folder"))
     path.mkdir(exist_ok=True)
     os.startfile(path)  # otwiera Eksplorator Windows
     return {"opened": str(path)}
@@ -589,9 +615,9 @@ def update_settings(req: UpdateSettings) -> dict:
 def update_restart() -> dict:
     """Zamyka okno; launcher czeka na koniec procesu, instaluje aktualizację i otwiera aplikację od nowa."""
     if WINDOW is None:
-        raise HTTPException(409, "Ponowne uruchomienie działa tylko w oknie aplikacji.")
+        raise HTTPException(409, problem("restart_window_only"))
     if updater().snapshot()["status"] != "ready":
-        raise HTTPException(409, "Nie ma przygotowanej aktualizacji.")
+        raise HTTPException(409, problem("no_staged_update"))
     launcher = shutil.which("pyw") or sys.executable
     subprocess.Popen(  # poza obiektem zadania, inaczej zginąłby razem z tym procesem
         [launcher, str(ROOT / "mysttic-audition.pyw"), "--czekaj", str(os.getpid())], cwd=ROOT,
@@ -611,7 +637,7 @@ LOG_FILE = DATA / "app.log"
 def focus_window() -> dict:
     """Drugie uruchomienie nie otwiera nowego okna, tylko wyciąga istniejące na wierzch."""
     if WINDOW is None:
-        raise HTTPException(404, "Aplikacja działa bez okna.")
+        raise HTTPException(404, problem("no_window"))
     WINDOW.restore()
     WINDOW.on_top = True
     WINDOW.on_top = False
@@ -659,7 +685,7 @@ def kill_children_with_app() -> None:
     limits.basic.flags = 0x2000 | 0x0800
     configured = kernel32.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits))
     if not (configured and kernel32.AssignProcessToJobObject(job, kernel32.GetCurrentProcess())):
-        print(f"Obiekt zadania niedostępny (błąd {ctypes.get_last_error()}).", flush=True)
+        print(f"Job object unavailable (error {ctypes.get_last_error()}).", flush=True)
     # Uchwytu nie zamykamy: system zamknie go razem z procesem i wtedy zakończy procesy potomne.
 
 
@@ -673,7 +699,7 @@ def bind_socket() -> socket.socket:
             return sock
         except OSError:
             sock.close()
-    raise OSError("Brak wolnego portu na 127.0.0.1.")
+    raise OSError("No free port on 127.0.0.1.")
 
 
 def log_to_file() -> None:
@@ -727,7 +753,7 @@ def run_server() -> None:
     recover()
     threading.Thread(target=worker, daemon=True, name="transkrypcja").start()
     UPDATER = updates.Updater(DATA, VERSION)
-    print(f"{APP_NAME} {VERSION} (serwer): http://{HOST}:{PORT}/", flush=True)
+    print(f"{APP_NAME} {VERSION} (server): http://{HOST}:{PORT}/", flush=True)
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
 
 
@@ -739,8 +765,11 @@ def main() -> None:
         run_desktop()
     except Exception as exc:
         traceback.print_exc()
-        ctypes.windll.user32.MessageBoxW(
-            None, f"Nie udało się uruchomić aplikacji:\n{exc}\n\nSzczegóły: {LOG_FILE}", APP_NAME, 0x10)
+        message = {  # w języku interfejsu, bo okno aplikacji nie zdążyło się pokazać
+            "en": f"{APP_NAME} could not start:\n{exc}\n\nDetails: {LOG_FILE}",
+            "pl": f"Nie udało się uruchomić aplikacji:\n{exc}\n\nSzczegóły: {LOG_FILE}",
+        }[load_settings()["ui_language"]]
+        ctypes.windll.user32.MessageBoxW(None, message, APP_NAME, 0x10)
         os._exit(1)
 
 

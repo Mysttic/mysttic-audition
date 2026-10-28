@@ -49,7 +49,11 @@ TAG_RE = re.compile(re.escape(TAG_PREFIX) + r"(\d+\.\d+\.\d+)")
 
 
 class UpdateError(Exception):
-    """Błąd z komunikatem, który można pokazać użytkownikowi."""
+    """Błąd do pokazania użytkownikowi: kod, który tłumaczy interfejs (klucze error.* w static/i18n), i szczegóły."""
+
+    def __init__(self, code: str, **details) -> None:
+        super().__init__(code, details)
+        self.problem = {"code": code, **details}
 
 
 def read_version(path: Path) -> str:
@@ -121,7 +125,7 @@ def changelog_section(text: str, version: str) -> str:
 def check_download_url(url: str) -> None:
     parts = urllib.parse.urlsplit(url)
     if parts.scheme != "https" or parts.hostname not in DOWNLOAD_HOSTS:
-        raise UpdateError(f"Odmowa pobierania spoza GitHuba ({parts.scheme}://{parts.hostname}).")
+        raise UpdateError("update_foreign_host", host=f"{parts.scheme}://{parts.hostname}")
 
 
 class _GitHubRedirects(urllib.request.HTTPRedirectHandler):
@@ -148,7 +152,7 @@ def fetch_releases(user_agent: str) -> object:
 def download(url: str, target: Path, user_agent: str, expected_size: int | None = None, progress=None) -> str:
     """Pobiera plik i zwraca jego SHA-256. Przerwane pobranie nie zostawia pliku docelowego."""
     if not url.startswith(DOWNLOAD_PREFIX):
-        raise UpdateError(f"Adres pliku nie prowadzi do wydań {HUB}.")
+        raise UpdateError("update_bad_url", hub=HUB)
     check_download_url(url)
     part = target.with_name(target.name + ".part")
     digest = hashlib.sha256()
@@ -160,13 +164,13 @@ def download(url: str, target: Path, user_agent: str, expected_size: int | None 
             while chunk := response.read(256 * 1024):
                 received += len(chunk)
                 if received > MAX_PACKAGE_BYTES:
-                    raise UpdateError("Plik jest większy, niż może być paczka aplikacji.")
+                    raise UpdateError("update_too_large")
                 digest.update(chunk)
                 out.write(chunk)
                 if progress:
                     progress(received, expected_size)
         if expected_size is not None and received != expected_size:
-            raise UpdateError(f"Pobrano {received} z {expected_size} bajtów.")
+            raise UpdateError("update_size_mismatch", received=received, expected=expected_size)
         part.replace(target)
     except BaseException:
         part.unlink(missing_ok=True)
@@ -186,26 +190,27 @@ def extract_package(package: Path, target: Path, version: str) -> None:
             path = PurePosixPath(info.filename)
             if (path.is_absolute() or ".." in path.parts or ":" in info.filename or "\\" in info.filename
                     or len(path.parts) < 2 or path.parts[0] != PROJECT or path.parts[1] in KEEP):
-                raise UpdateError(f"Podejrzana ścieżka w paczce: {info.filename}")
+                raise UpdateError("update_suspicious_path", path=info.filename)
             destination = target.joinpath(*path.parts[1:])
             destination.parent.mkdir(parents=True, exist_ok=True)
             with archive.open(info) as source, open(destination, "wb") as out:
                 shutil.copyfileobj(source, out)
     if (read_version(target / "VERSION.md") != version or not (target / "app.py").is_file()
             or not (target / f"{PROJECT}.pyw").is_file()):
-        raise UpdateError(f"Paczka nie zawiera {NAME} w wersji {version}.")
+        raise UpdateError("update_wrong_package", version=version)
 
 
-def describe(exc: Exception) -> str:
+def describe(exc: Exception) -> dict:
+    """Błąd jako komunikat dla użytkownika: kod i szczegóły, które interfejs tłumaczy na swój język."""
     if isinstance(exc, UpdateError):
-        return str(exc)
+        return exc.problem
     if isinstance(exc, urllib.error.HTTPError):
         if exc.code in (403, 429):
-            return "GitHub chwilowo ogranicza liczbę zapytań. Spróbuj później."
-        return f"GitHub odpowiedział błędem {exc.code}."
+            return {"code": "update_rate_limited"}
+        return {"code": "update_http_error", "status": exc.code}
     if isinstance(exc, (urllib.error.URLError, TimeoutError, ConnectionError)):
-        return "Brak połączenia z GitHubem."
-    return "Nieoczekiwana odpowiedź GitHuba."
+        return {"code": "update_offline"}
+    return {"code": "update_unexpected"}
 
 
 class Updater:
@@ -274,7 +279,7 @@ class Updater:
                 self._save_settings()
                 self.state.update(status="available" if release else "up_to_date", release=release)
         except Exception as exc:
-            self.log(f"Aktualizacje: sprawdzenie nie powiodło się: {exc!r}")
+            self.log(f"Updates: check failed: {exc!r}")
             with self._lock:
                 self.state.update(status="failed", error=describe(exc))
         finally:
@@ -303,7 +308,7 @@ class Updater:
             download(release["checksums"]["url"], sums_file, self.user_agent, release["checksums"]["size"])
             expected = parse_checksums(sums_file.read_text("utf-8")).get(release["package"]["name"])
             if not expected:
-                raise UpdateError("Plik sum nie obejmuje paczki.")
+                raise UpdateError("update_no_checksum")
 
             def progress(received: int, total: int | None) -> None:
                 with self._lock:
@@ -312,7 +317,7 @@ class Updater:
             package = work / release["package"]["name"]
             actual = download(release["package"]["url"], package, self.user_agent, release["package"]["size"], progress)
             if actual != expected:
-                raise UpdateError("Suma SHA-256 paczki się nie zgadza.")
+                raise UpdateError("update_checksum_mismatch")
             files = work / "pliki"
             extract_package(package, files, release["version"])
             try:
@@ -325,9 +330,9 @@ class Updater:
             sums_file.unlink()
             with self._lock:
                 self.state.update(status="ready", release=staged, progress=None)
-            self.log(f"Aktualizacje: wersja {release['version']} gotowa do instalacji.")
+            self.log(f"Updates: version {release['version']} is ready to install.")
         except Exception as exc:
-            self.log(f"Aktualizacje: pobieranie nie powiodło się: {exc!r}")
+            self.log(f"Updates: download failed: {exc!r}")
             shutil.rmtree(work, ignore_errors=True)
             with self._lock:
                 self.state.update(status="failed", error=describe(exc), progress=None)

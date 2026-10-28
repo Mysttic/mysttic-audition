@@ -1,20 +1,20 @@
-# Wersja
+# Version
 
-0.3.0
+0.4.0
 
 ---
 
-Tu jest numer wydania i to jego zmiana uruchamia wydanie: workflow
-[`.github/workflows/wydanie.yml`](.github/workflows/wydanie.yml) startuje tylko wtedy,
-gdy ten plik był wśród zmian, które trafiły na gałąź `main`.
+This is the release number, and changing it is what triggers a release: the
+[`.github/workflows/wydanie.yml`](.github/workflows/wydanie.yml) workflow runs only when this
+file is among the changes that reach the `main` branch.
 
-Numer ma postać `major.minor.patch`. Aplikacja i workflow czytają pierwszą linię złożoną
-wyłącznie z takiego numeru, więc reszta pliku może być dowolna.
+The number has the form `major.minor.patch`. The app and the workflow read the first line that
+consists of such a number alone, so the rest of the file can say anything.
 
-To jedyne miejsce z numerem wersji. Aplikacja czyta go przy starcie (nagłówek, okno
-„O aplikacji”, porównanie z wydaniami przy sprawdzaniu aktualizacji), a paczka wydania
-zawiera ten plik, więc po aktualizacji aplikacja zna swój nowy numer.
+This is the only place with the version number. The app reads it at startup (the header,
+Settings, comparing with releases when checking for updates), and the release package includes
+this file, so after an update the app knows its new number.
 
-Podnosząc numer, dopisz sekcję `## [X.Y.Z] - RRRR-MM-DD` w [CHANGELOG.md](CHANGELOG.md).
-Bez niej wydanie się nie zbuduje, a jej treść trafia do opisu wydania i do okna
-aktualizacji w aplikacji.
+When you raise the number, add a `## [X.Y.Z] - YYYY-MM-DD` section to
+[CHANGELOG.md](CHANGELOG.md). Without it the release is not built, and its content becomes the
+release description and the update notes shown in the app.

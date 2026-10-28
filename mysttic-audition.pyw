@@ -22,7 +22,16 @@ PYTHONW = ROOT / ".venv" / "Scripts" / "pythonw.exe"
 MARKER = ROOT / ".venv" / "zainstalowano.txt"  # skrót requirements.txt z ostatniej udanej instalacji
 STAGING = ROOT / "data" / "update"
 INSTANCE = ROOT / "data" / "instance.json"
+SETTINGS = ROOT / "data" / "ustawienia.json"
 TITLE = "Mysttic Audition"
+
+
+def polish() -> bool:
+    """Komunikaty w języku interfejsu (ustawienia, sekcja Ogólne); domyślnie po angielsku."""
+    try:
+        return json.loads(SETTINGS.read_text("utf-8")).get("ui_language") == "pl"
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 def version_of(text: str) -> tuple[int, ...]:
@@ -65,9 +74,12 @@ def install_update() -> None:
                 shutil.copy2(source, target)
         shutil.rmtree(STAGING)
     except OSError as exc:
-        ctypes.windll.user32.MessageBoxW(
-            None, f"Nie udało się zainstalować aktualizacji {staged}:\n{exc}\n\n"
-                  "Spróbuję ponownie przy następnym uruchomieniu.", TITLE, 0x30)
+        if polish():
+            message = (f"Nie udało się zainstalować aktualizacji {staged}:\n{exc}\n\n"
+                       "Spróbuję ponownie przy następnym uruchomieniu.")
+        else:
+            message = f"Could not install update {staged}:\n{exc}\n\nThe app will try again the next time it starts."
+        ctypes.windll.user32.MessageBoxW(None, message, TITLE, 0x30)
 
 
 def main() -> None:

@@ -5,165 +5,201 @@
 <h1 align="center">Mysttic Audition</h1>
 
 <p align="center">
-  Lokalna aplikacja Windows do przeglądania nagrań: transkrypcja z czasem każdego słowa,
-  wyszukiwanie słów i fraz, porównywanie i przycinanie fragmentów. Dźwięk nie jest w żaden
-  sposób modyfikowany, a nagrania nie opuszczają komputera.
+  A local Windows app for reviewing recordings: a transcript with the timing of every word,
+  word and phrase search, and comparing and trimming fragments. The audio is never altered,
+  and recordings never leave your computer.
 </p>
 
 <p align="center">
-  <a href="https://mysttic.github.io/Mysttic/mysttic-audition/"><b>Pobierz</b></a>
-  &nbsp;·&nbsp; <a href="CHANGELOG.md">Historia zmian</a>
-  &nbsp;·&nbsp; <a href="VERSION.md">Numer wersji</a>
+  <a href="https://mysttic.github.io/Mysttic/mysttic-audition/"><b>Download</b></a>
+  &nbsp;·&nbsp; <a href="CHANGELOG.md">Changelog</a>
+  &nbsp;·&nbsp; <a href="VERSION.md">Version</a>
 </p>
 
-![Mysttic Audition z otwartym nagraniem: przebieg fali z dwoma fragmentami, transkrypcja i wyniki wyszukiwania słowa „umowa”](docs/zrzut.png)
+<p align="center">
+  <i>Wersja polska: <a href="README.pl.md">README.pl.md</a></i>
+</p>
 
-## Co potrafi
+![Mysttic Audition with a recording open: the waveform with two fragments, the transcript and search results for the word "contract"](docs/screenshot.png)
 
-- **Audio i wideo bez konwersji.** MP3, WAV, M4A, FLAC, OGG, OPUS, WMA, MP4, MKV, MOV, AVI,
-  WEBM i inne. Ścieżkę dźwiękową z wideo aplikacja wyciąga sama.
-- **Transkrypcja na tym komputerze.** Whisper large-v3-turbo z czasem każdego słowa. Tekst
-  pojawia się na bieżąco, kliknięcie słowa odtwarza nagranie od tego miejsca, a słowa
-  rozpoznane z niską pewnością są podkreślone.
-- **Szukanie z odmianą.** Wielkość liter, ogonki i interpunkcja nie mają znaczenia. „umowa”
-  znajdzie „umowy” i „umowie”, a fraza „kara umowna” także „karę umowną”.
-- **Fragmenty i porównanie A/B.** Zaznaczenie na fali albo „+” przy wyniku wyszukiwania,
-  klawisze 1 do 9 i pętla.
-- **Przycinanie bez modyfikacji.** WAV wycięty co do próbki albo oryginalny kodek bez
-  ponownego kodowania.
-- **Program jak każdy inny w Windows.** Własne okno i jedna kopia; zamknięcie okna kończy
-  wszystko, łącznie z transkrypcją i pamięcią zajętą przez model.
-- **Aktualizacje.** Raz na dobę, ze sprawdzeniem sumy SHA-256, instalacja przy następnym starcie.
+## Features
 
-## Instalacja
+- **Audio and video, no conversion.** MP3, WAV, M4A, FLAC, OGG, OPUS, WMA, MP4, MKV, MOV, AVI,
+  WEBM and more. The app extracts the audio track from a video by itself.
+- **Transcription on your computer.** Whisper large-v3-turbo with the timing of every word. Text
+  appears as it is recognised, clicking a word plays the recording from there, and words
+  recognised with low confidence are underlined.
+- **Search that understands word forms.** Case, accents and punctuation don't matter. "contract"
+  also finds "contracts", and in Polish "umowa" finds "umowy" and "umowie", while the phrase
+  "kara umowna" also finds "karę umowną".
+- **Fragments and A/B comparison.** Mark a fragment on the waveform or with "+" next to a search
+  result, then switch between fragments with keys 1 to 9 and the loop.
+- **Trimming without alteration.** WAV cut to the exact sample, or the original codec without
+  re-encoding.
+- **Behaves like any Windows program.** Its own window and a single instance; closing the window
+  ends everything, including transcription and the memory used by the model.
+- **English or Polish, whatever the recording.** The interface is in English by default, with
+  Polish in Settings. The language of a recording is chosen for each file before it is
+  transcribed, independently of the interface language.
+- **Updates.** Once a day, verified with SHA-256, installed at the next start.
 
-Wymagania:
+## Installation
 
-- Windows 10 lub 11 z Microsoft Edge WebView2 (w Windows 11 jest w systemie);
-- Python 3.10 lub nowszy z [python.org](https://www.python.org/downloads/), razem z „py
-  launcher”, dzięki któremu działa dwuklik w pliki `.pyw`;
-- około 2 GB miejsca na zależności i domyślny model;
-- internet przy pierwszym uruchomieniu (zależności) i przy pierwszej transkrypcji (model, 1,6 GB).
+Requirements:
 
-Kroki:
+- Windows 10 or 11 with Microsoft Edge WebView2 (built into Windows 11);
+- Python 3.10 or newer from [python.org](https://www.python.org/downloads/), including the
+  "py launcher", which makes double-clicking `.pyw` files work;
+- about 2 GB of disk space for the dependencies and the default model;
+- an internet connection on the first start (dependencies) and for the first transcription
+  (the model, 1.6 GB).
 
-1. Pobierz `mysttic-audition-<wersja>-windows.zip` ze
-   [strony projektu](https://mysttic.github.io/Mysttic/mysttic-audition/) i rozpakuj w wybranym
-   miejscu.
-2. Dwuklik `mysttic-audition.pyw`. Pierwszy start otwiera konsolę z instalacją zależności
-   (kilka minut), potem aplikacja uruchamia się sama.
+Steps:
 
-## Obsługa
+1. Download `mysttic-audition-<version>-windows.zip` from the
+   [project page](https://mysttic.github.io/Mysttic/mysttic-audition/) and unpack it anywhere.
+2. Double-click `mysttic-audition.pyw`. The first start opens a console that installs the
+   dependencies (a few minutes), and then the app starts by itself.
 
-| Czynność | Jak |
+## Usage
+
+| Action | How |
 |---|---|
-| Otwarcie pliku | „Otwórz plik…” albo przeciągnięcie pliku do okna |
-| Odtwarzanie od słowa | kliknięcie słowa albo znacznika czasu w transkrypcji |
-| Odtwarzanie i pauza | Spacja |
-| Przewijanie | strzałki w lewo i w prawo, o 2 s |
-| Szukanie | pole „Szukaj słowa lub frazy”; Enter i Shift+Enter przechodzą między wynikami |
-| Fragment | przeciągnięcie po fali albo „+” przy wyniku |
-| Porównanie A/B | klawisze 1 do 9 odtwarzają fragmenty, L włącza pętlę |
-| Eksport | „WAV” albo „Oryginał” przy fragmencie, potem okno „Zapisz jako” |
-| Ustawienia: model, język, aktualizacje, dane | przycisk „Ustawienia” w prawym górnym rogu albo Ctrl+, |
-| Ponowna transkrypcja innym modelem | „Transkrybuj ponownie” nad tekstem |
+| Open a file | "Open file…" or drag a file into the window, then choose the recording language and "Transcribe" |
+| Play from a word | click a word or a timestamp in the transcript |
+| Play and pause | Space |
+| Skip | left and right arrows, 2 s at a time |
+| Search | the "Search for a word or phrase" box; Enter and Shift+Enter move between results |
+| Fragment | drag across the waveform, or "+" next to a result |
+| A/B comparison | keys 1 to 9 play the fragments, L turns the loop on |
+| Export | "WAV" or "Original" next to a fragment, then the "Save As" dialog |
+| Settings: interface language, defaults, updates, data | the "Settings" button in the top right corner, or Ctrl+, |
+| Transcribe again in another language or with another model | "Transcribe again" above the text |
 
-Eksport:
+Export:
 
-- **WAV**: cięcie co do próbki. Próbki są identyczne z oryginałem (dla formatów stratnych: ze
-  zdekodowanym oryginałem).
-- **Oryginał**: ramki oryginalnego kodeka bez ponownego kodowania, więc dane są nietknięte.
-  Granice cięcia mają dokładność ramki kodeka, około 20 do 30 ms; dla nieskompresowanego WAV
-  cięcie jest co do próbki.
+- **WAV**: cut to the exact sample. The samples are identical to the original (for lossy
+  formats: to the decoded original).
+- **Original**: the original codec's frames without re-encoding, so the data is untouched. The
+  cut edges are accurate to a codec frame, about 20 to 30 ms; for uncompressed WAV the cut is
+  exact to the sample.
 
-Zamknięcie okna kończy całą aplikację. Przerwana transkrypcja wraca do kolejki przy następnym
-starcie. Ponowne uruchomienie przy otwartej aplikacji nie otwiera drugiej kopii, tylko
-przywraca istniejące okno.
+Closing the window ends the whole app. An interrupted transcription goes back to the queue at
+the next start. Starting the app again while it is running does not open a second copy; it
+brings the existing window back.
 
-## Modele
+## Languages
 
-| Model | Uwagi |
+The interface language and the recording language are separate. The interface is in English
+by default; Polish is in Settings, General section, and the change applies at once, without a
+restart.
+
+The recording language is chosen for each file, in the dialog that opens when you add it and
+before anything is sent for transcription; "Transcribe again" opens the same dialog. "Detect
+automatically" lets Whisper recognise the language from the first 30 seconds of speech; choose
+the language yourself if a recording starts with music, silence or a different language. The
+Transcription section of Settings only sets what the dialog preselects.
+
+## Models
+
+| Model | Notes |
 |---|---|
-| large-v3-turbo | domyślny; na Ryzen 7 8845HS transkrypcja trwa ok. 0,25 długości nagrania |
-| small | kilka razy szybszy, wyraźnie słabszy dla polskiego |
-| medium | pośredni |
-| large-v3 | najdokładniejszy, kilka razy wolniejszy od turbo |
+| large-v3-turbo | default; on a Ryzen 7 8845HS transcription takes about 0.25 of the recording's length |
+| small | several times faster, clearly weaker for Polish |
+| medium | in between |
+| large-v3 | the most accurate, several times slower than turbo |
 
-Modele pobierają się do `models/` przy pierwszym użyciu, a transkrypcja działa na procesorze.
-Whisper zapisuje liczby cyframi („10%” zamiast „dziesięć procent”), więc liczb szukaj cyframi.
+Models are downloaded to `models/` on first use, and transcription runs on the CPU. Whisper
+writes numbers as digits ("10%" rather than "ten percent"), so search for numbers using digits.
 
-## Aktualizacje
+## Updates
 
-- Raz na dobę (opcja w ustawieniach, sekcja Aktualizacje, domyślnie włączona) aplikacja pyta publiczne API
-  GitHuba o wydania w [Mysttic/Mysttic](https://github.com/Mysttic/Mysttic/releases), z których
-  korzysta też strona projektu. Bez tokenu i bez danych o użytkowniku czy komputerze.
-- Nowszą wersję pobiera wyłącznie spod `github.com/Mysttic/Mysttic/releases/download/`,
-  sprawdza rozmiar i sumę SHA-256, rozpakowuje do `data/update/` i czeka.
-- Instaluje ją launcher przy następnym uruchomieniu albo od razu przycisk „Uruchom ponownie
-  i zainstaluj”. Podmieniane są tylko pliki programu: `data/`, `models/` i `.venv/` zostają.
-  Gdy nowa wersja zmienia zależności, launcher sam je doinstaluje.
-- Błąd sieci niczego nie psuje; kolejna próba za godzinę.
+- Once a day (an option in Settings, Updates section, on by default) the app asks GitHub's
+  public API for the releases in [Mysttic/Mysttic](https://github.com/Mysttic/Mysttic/releases),
+  which the project page uses as well. No token and no data about the user or the computer.
+- It downloads a newer version only from `github.com/Mysttic/Mysttic/releases/download/`,
+  checks its size and SHA-256 checksum, unpacks it to `data/update/` and waits.
+- The launcher installs it at the next start, or right away with the "Restart and install"
+  button. Only the program files are replaced: `data/`, `models/` and `.venv/` stay. When a new
+  version changes the dependencies, the launcher installs them by itself.
+- A network error breaks nothing; the next attempt is an hour later.
 
-## Dane i prywatność
+## Data and privacy
 
-- `data/<id>/`: kopia oryginalnej ścieżki dźwiękowej (bez obrazu), podgląd FLAC, przebieg fali
-  i transkrypcja. Przesłana kopia pliku jest usuwana po wyciągnięciu dźwięku, oryginał zostaje
-  tam, gdzie był. „Usuń z biblioteki” kasuje dane aplikacji dla danego pliku.
-- `data/ustawienia.json` to ustawienia (model, język, przewijanie tekstu), `data/aktualizacje.json`
-  ustawienia aktualizacji, a `data/app.log` dziennik. Sekcja Dane w ustawieniach pokazuje, ile
-  zajmują biblioteka i modele, i otwiera ich foldery.
-- Z internetem aplikacja łączy się tylko po zależności, modele i informację o wydaniach.
+- `data/<id>/`: a copy of the original audio track (without the picture), a FLAC preview, the
+  waveform and the transcript. The uploaded copy of the file is deleted once the audio is
+  extracted, and the original stays where it was. "Remove from library" deletes the app's data
+  for that file.
+- `data/ustawienia.json` holds the settings (interface language, default recording language and
+  model, text scrolling), `data/aktualizacje.json` the update settings, and `data/app.log` the log. The
+  Data section of Settings shows how much space the library and the models take and opens their
+  folders.
+- The app connects to the internet only for the dependencies, the models and the release
+  information.
 
-## Dla deweloperów
+## For developers
 
-| Ścieżka | Rola |
+| Path | Role |
 |---|---|
-| `mysttic-audition.pyw` | launcher: zależności, instalacja aktualizacji, start bez konsoli |
-| `app.py` | serwer (FastAPI), dźwięk (ffmpeg, PyAV), transkrypcja, okno (pywebview) |
-| `updates.py` | aktualizacje według kontraktu huba, tylko biblioteka standardowa |
-| `static/` | interfejs (HTML, CSS, JS, wavesurfer.js w `vendor/`) i ikona |
-| `instaluj.bat` | tworzy `.venv` i instaluje `requirements.txt` |
-| `tools/pakiet.py` | paczka wydania z plikiem sum |
-| `tools/make_icons.py` | ikona z jednego opisu: `brand/icon.svg`, `static/icon.ico`, `static/icon.png` |
-| `tests/` | testy aktualizacji i paczki |
-| `.github/workflows/` | `testy.yml` i `wydanie.yml` |
-| `spike/` | eksperyment: Whisper w przeglądarce (WebGPU) porównany z faster-whisper |
+| `mysttic-audition.pyw` | launcher: dependencies, installing updates, starting without a console |
+| `app.py` | server (FastAPI), audio (ffmpeg, PyAV), transcription, window (pywebview) |
+| `updates.py` | updates following the hub contract, standard library only |
+| `static/` | interface (HTML, CSS, JS, translations in `i18n/`, wavesurfer.js in `vendor/`) and icon |
+| `instaluj.bat` | creates `.venv` and installs `requirements.txt` |
+| `tools/pakiet.py` | release package with a checksum file |
+| `tools/make_icons.py` | the icon from a single description: `brand/icon.svg`, `static/icon.ico`, `static/icon.png` |
+| `tests/` | tests of updates and translations |
+| `.github/workflows/` | `testy.yml` and `wydanie.yml` |
+| `spike/` | experiment: Whisper in the browser (WebGPU) compared with faster-whisper |
 
-Serwer bez okna pod http://127.0.0.1:8791 (inny port: `AUDITION_PORT`):
+The server without a window, at http://127.0.0.1:8791 (another port: `AUDITION_PORT`):
 
 ```bash
 .venv/Scripts/python.exe app.py --server
 ```
 
-Testy (sama biblioteka standardowa):
+Tests (standard library only):
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-Ikona po zmianie opisu w `tools/make_icons.py` (potrzebuje Pillow z `requirements-dev.txt`):
+The icon after changing its description in `tools/make_icons.py` (needs Pillow from
+`requirements-dev.txt`):
 
 ```bash
 .venv/Scripts/python.exe tools/make_icons.py
 ```
 
-### Wydanie nowej wersji
+### Translations
 
-1. Podnieś numer w [VERSION.md](VERSION.md).
-2. Dopisz sekcję `## [X.Y.Z] - RRRR-MM-DD` w [CHANGELOG.md](CHANGELOG.md).
-3. Scal zmiany do `main`. Workflow [wydanie.yml](.github/workflows/wydanie.yml) uruchomi testy,
-   zbuduje paczkę z sumami, opublikuje wydanie `vX.Y.Z` i skopiuje oba pliki do huba jako
-   `mysttic-audition-vX.Y.Z`. Od tej chwili widzą je strona projektu i aktualizacja w aplikacji.
+Interface texts are in `static/i18n/en.json` and `static/i18n/pl.json`. The HTML marks
+elements with `data-i18n` (text), `data-i18n-title` and `data-i18n-placeholder`, and `app.js`
+uses `t('key', {param})`; an entry with plural forms is an object keyed by
+[`Intl.PluralRules`](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Intl/PluralRules)
+categories. The server reports errors as codes (`{"code": "file_not_found"}`), which the
+interface translates with the `error.*` keys. `tests/test_i18n.py` checks that both languages
+have the same keys, placeholders and plural forms, and that every key and error code used in
+the code has a translation.
 
-Jednorazowo w ustawieniach repozytorium (Settings, Secrets and variables, Actions) potrzebny jest
-sekret `HUB_TOKEN`: token osobisty typu fine-grained, właściciel `Mysttic`, dostęp tylko do
-`Mysttic/Mysttic`, uprawnienie Contents: Read and write. Kontrakt huba opisuje
+### Releasing a new version
+
+1. Raise the number in [VERSION.md](VERSION.md).
+2. Add a `## [X.Y.Z] - YYYY-MM-DD` section to [CHANGELOG.md](CHANGELOG.md).
+3. Merge the changes into `main`. The [wydanie.yml](.github/workflows/wydanie.yml) workflow runs
+   the tests, builds the package with checksums, publishes the `vX.Y.Z` release and copies both
+   files to the hub as `mysttic-audition-vX.Y.Z`. From then on, the project page and the update
+   check in the app can see it.
+
+The repository needs a `HUB_TOKEN` secret, set once in Settings, Secrets and variables, Actions:
+a fine-grained personal access token, owner `Mysttic`, access to `Mysttic/Mysttic` only, with
+Contents: Read and write. The hub contract is described in
 [RELEASES.md](https://github.com/Mysttic/Mysttic/blob/master/RELEASES.md).
 
-## Biblioteki zewnętrzne
+## Third-party libraries
 
-faster-whisper i CTranslate2 (MIT), modele Whisper (MIT), FastAPI (MIT), Uvicorn
-(BSD-3-Clause), pywebview (BSD-3-Clause), wavesurfer.js (BSD-3-Clause, licencja w
-`static/vendor/`), PyAV (BSD-3-Clause), NumPy (BSD-3-Clause) oraz imageio-ffmpeg (BSD-2-Clause)
-z kompilacją FFmpeg na licencji GPL. FFmpeg instaluje się przez pip i nie jest częścią paczki
-wydania.
+faster-whisper and CTranslate2 (MIT), the Whisper models (MIT), FastAPI (MIT), Uvicorn
+(BSD-3-Clause), pywebview (BSD-3-Clause), wavesurfer.js (BSD-3-Clause, license in
+`static/vendor/`), PyAV (BSD-3-Clause), NumPy (BSD-3-Clause) and imageio-ffmpeg (BSD-2-Clause)
+with an FFmpeg build under the GPL. FFmpeg is installed through pip and is not part of the
+release package.

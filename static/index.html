@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en" class="booting">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,27 +8,28 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+  <!-- Teksty wpisuje app.js ze słowników static/i18n według atrybutów data-i18n. -->
   <header>
     <div class="brand">
       <img src="/static/icon.png" alt="" width="22" height="22">
       <strong>Mysttic Audition</strong>
       <span id="app-version" class="muted"></span>
     </div>
-    <label class="btn primary">Otwórz plik…
+    <label class="btn primary"><span data-i18n="header.open_file"></span>
       <input id="file-input" type="file" hidden
         accept="audio/*,video/*,.mkv,.mka,.avi,.wmv,.wma,.flv,.mts,.m2ts,.ts,.3gp,.amr,.opus,.aiff,.aif">
     </label>
-    <select id="library" title="Wcześniej otwarte pliki"></select>
+    <select id="library" data-i18n-title="header.library_title"></select>
     <span id="status" class="status"></span>
     <button id="update-pill" class="pill" type="button" hidden></button>
-    <button id="settings-open" type="button" title="Ustawienia (Ctrl+,)"><span class="gear" aria-hidden="true">⚙</span> Ustawienia</button>
+    <button id="settings-open" type="button" data-i18n-title="header.settings_title"><span class="gear" aria-hidden="true">⚙</span> <span data-i18n="header.settings"></span></button>
   </header>
 
-  <div id="drop-overlay">Upuść plik audio lub wideo</div>
+  <div id="drop-overlay" data-i18n="empty.drop"></div>
 
   <section id="empty" class="empty">
-    <p>Otwórz albo przeciągnij tutaj plik audio lub wideo (MP3, WAV, M4A, FLAC, MP4, MKV, MOV, AVI…).</p>
-    <p class="muted">Dźwięk z wideo jest wyciągany automatycznie. Wszystko działa lokalnie, nic nie wychodzi z komputera.</p>
+    <p data-i18n="empty.lead"></p>
+    <p class="muted" data-i18n="empty.note"></p>
   </section>
 
   <main id="workspace" hidden>
@@ -36,40 +37,39 @@
       <div class="file-bar">
         <strong id="file-name"></strong>
         <span id="file-info" class="muted"></span>
-        <button id="delete" class="ghost" title="Usuwa dane aplikacji; oryginalny plik na dysku zostaje">Usuń z biblioteki</button>
+        <button id="delete" class="ghost" data-i18n="file.delete" data-i18n-title="file.delete_title"></button>
       </div>
       <div id="waveform"></div>
       <div class="controls">
-        <button id="play" class="primary" title="Spacja">▶ Odtwórz</button>
+        <button id="play" class="primary" data-i18n-title="player.play_title"></button>
         <span id="time" class="mono"></span>
-        <label>Powiększenie <input id="zoom" type="range" min="0" max="100" value="0"></label>
-        <label title="Klawisz L"><input id="loop" type="checkbox"> Zapętl fragment</label>
-        <span class="muted hint">Przeciągnij po fali, aby zaznaczyć fragment.</span>
+        <label><span data-i18n="player.zoom"></span> <input id="zoom" type="range" min="0" max="100" value="0"></label>
+        <label data-i18n-title="player.loop_title"><input id="loop" type="checkbox"> <span data-i18n="player.loop"></span></label>
+        <span class="muted hint" data-i18n="player.hint"></span>
       </div>
     </section>
 
     <section class="transcript-panel">
       <div class="panel-head">
-        <h2>Transkrypcja</h2>
+        <h2 data-i18n="transcript.heading"></h2>
         <span id="tr-status" class="muted"></span>
-        <button id="retranscribe" class="ghost" disabled title="Przepisz ten plik innym modelem albo w innym języku">Transkrybuj ponownie</button>
+        <button id="retranscribe" class="ghost" disabled data-i18n="transcript.again" data-i18n-title="transcript.again_title"></button>
       </div>
       <div id="transcript"></div>
     </section>
 
     <aside class="side">
       <div class="search">
-        <input id="search" type="search" placeholder="Szukaj słowa lub frazy…" autocomplete="off">
-        <label title="Bez tej opcji „umowa” znajdzie też „umowy”, „umowie”, a wielkość liter i ogonki nie mają znaczenia">
-          <input id="exact" type="checkbox"> dokładnie
+        <input id="search" type="search" data-i18n-placeholder="search.placeholder" autocomplete="off">
+        <label data-i18n-title="search.exact_title">
+          <input id="exact" type="checkbox"> <span data-i18n="search.exact"></span>
         </label>
       </div>
       <div id="hits-info" class="muted"></div>
       <ol id="hits"></ol>
-      <h2>Fragmenty</h2>
+      <h2 data-i18n="fragments.heading"></h2>
       <ol id="fragments"></ol>
-      <p id="fragments-empty" class="muted">Zaznacz fragment na fali albo dodaj wynik wyszukiwania przyciskiem +.
-        Dwa fragmenty z włączoną pętlą i klawisze 1, 2 dają szybkie porównanie A/B.</p>
+      <p id="fragments-empty" class="muted" data-i18n="fragments.empty"></p>
     </aside>
   </main>
 
@@ -83,100 +83,108 @@
             <div id="settings-version" class="muted small"></div>
           </div>
         </div>
-        <button type="button" data-section="transkrypcja">Transkrypcja</button>
-        <button type="button" data-section="odtwarzanie">Odtwarzanie</button>
-        <button type="button" data-section="aktualizacje">Aktualizacje <span id="update-dot" class="dot" hidden></span></button>
-        <button type="button" data-section="dane">Dane</button>
+        <button type="button" data-section="general" data-i18n="settings.general"></button>
+        <button type="button" data-section="transcription" data-i18n="settings.transcription"></button>
+        <button type="button" data-section="playback" data-i18n="settings.playback"></button>
+        <button type="button" data-section="updates"><span data-i18n="settings.updates"></span> <span id="update-dot" class="dot" hidden></span></button>
+        <button type="button" data-section="data" data-i18n="settings.data"></button>
       </nav>
 
       <div class="settings-body">
-        <section data-panel="transkrypcja">
-          <h2>Transkrypcja</h2>
-          <p class="muted">Dotyczy nowo dodanych plików. Plik już przetworzony przepiszesz innym modelem
-            przyciskiem „Transkrybuj ponownie” nad tekstem.</p>
-          <label class="field">Model
+        <section data-panel="general">
+          <h2 data-i18n="settings.general"></h2>
+          <label class="field"><span data-i18n="general.language"></span>
+            <select id="set-ui-language"></select>
+          </label>
+          <p class="muted small" data-i18n="general.language_note"></p>
+        </section>
+
+        <section data-panel="transcription" hidden>
+          <h2 data-i18n="settings.transcription"></h2>
+          <p class="muted" data-i18n="transcription.intro"></p>
+          <label class="field"><span data-i18n="transcription.language"></span>
+            <select id="set-language"></select>
+          </label>
+          <p class="muted small" data-i18n="transcription.auto_note"></p>
+          <label class="field"><span data-i18n="transcription.model"></span>
             <select id="set-model"></select>
           </label>
           <p id="model-hint" class="muted small"></p>
-          <label class="field">Język nagrań
-            <select id="set-language"></select>
-          </label>
-          <p class="muted small">„Wykryj automatycznie” rozpoznaje język po pierwszych 30 sekundach nagrania.</p>
         </section>
 
-        <section data-panel="odtwarzanie" hidden>
-          <h2>Odtwarzanie</h2>
-          <label class="check"><input id="set-follow" type="checkbox"> Przewijaj tekst za odtwarzaniem</label>
-          <h3>Skróty klawiszowe</h3>
+        <section data-panel="playback" hidden>
+          <h2 data-i18n="settings.playback"></h2>
+          <label class="check"><input id="set-follow" type="checkbox"> <span data-i18n="playback.follow"></span></label>
+          <h3 data-i18n="playback.shortcuts"></h3>
           <table class="keys">
-            <tr><td><kbd>Spacja</kbd></td><td>odtwarzanie i pauza</td></tr>
-            <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>przewinięcie o 2 sekundy</td></tr>
-            <tr><td><kbd>1</kbd> do <kbd>9</kbd></td><td>odtworzenie fragmentu o tym numerze</td></tr>
-            <tr><td><kbd>L</kbd></td><td>pętla fragmentu</td></tr>
-            <tr><td><kbd>Enter</kbd>, <kbd>Shift</kbd> + <kbd>Enter</kbd></td><td>następny i poprzedni wynik wyszukiwania</td></tr>
-            <tr><td><kbd>Ctrl</kbd> + <kbd>,</kbd></td><td>ustawienia</td></tr>
+            <tr><td><kbd data-i18n="playback.key_space"></kbd></td><td data-i18n="playback.key_play"></td></tr>
+            <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td data-i18n="playback.key_skip"></td></tr>
+            <tr><td><kbd>1</kbd> <span data-i18n="playback.key_to"></span> <kbd>9</kbd></td><td data-i18n="playback.key_fragment"></td></tr>
+            <tr><td><kbd>L</kbd></td><td data-i18n="playback.key_loop"></td></tr>
+            <tr><td><kbd>Enter</kbd>, <kbd>Shift</kbd> + <kbd>Enter</kbd></td><td data-i18n="playback.key_results"></td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>,</kbd></td><td data-i18n="playback.key_settings"></td></tr>
           </table>
-          <p class="muted small">Fragment zaznaczysz, przeciągając po fali, albo przyciskiem „+” przy wyniku
-            wyszukiwania. Kliknięcie słowa w transkrypcji odtwarza nagranie od tego miejsca.</p>
+          <p class="muted small" data-i18n="playback.note"></p>
         </section>
 
-        <section data-panel="aktualizacje" hidden>
-          <h2>Aktualizacje</h2>
-          <p>Zainstalowana wersja: <strong id="current-version"></strong></p>
+        <section data-panel="updates" hidden>
+          <h2 data-i18n="settings.updates"></h2>
+          <p><span data-i18n="updates.installed"></span> <strong id="current-version"></strong></p>
           <p id="update-status"></p>
           <progress id="update-progress" max="1" hidden></progress>
           <div id="update-notes" hidden></div>
           <div class="actions">
-            <button id="update-check" type="button">Sprawdź teraz</button>
-            <button id="update-download" class="primary" type="button" hidden>Pobierz aktualizację</button>
-            <button id="update-restart" class="primary" type="button" hidden>Uruchom ponownie i zainstaluj</button>
+            <button id="update-check" type="button" data-i18n="updates.check"></button>
+            <button id="update-download" class="primary" type="button" data-i18n="updates.download" hidden></button>
+            <button id="update-restart" class="primary" type="button" data-i18n="updates.restart" hidden></button>
           </div>
-          <label class="check"><input id="update-auto" type="checkbox">
-            Sprawdzaj i pobieraj aktualizacje automatycznie (raz na dobę)</label>
-          <p class="muted small">Aplikacja pyta tylko publiczne API GitHuba o listę wydań, bez danych o Tobie
-            i tym komputerze. Pobrana paczka jest sprawdzana sumą SHA-256 i instaluje się przy następnym
-            uruchomieniu. <a id="update-site" target="_blank" rel="noopener">Strona projektu</a></p>
+          <label class="check"><input id="update-auto" type="checkbox"> <span data-i18n="updates.auto"></span></label>
+          <p class="muted small"><span data-i18n="updates.privacy"></span>
+            <a id="update-site" target="_blank" rel="noopener" data-i18n="updates.site"></a></p>
         </section>
 
-        <section data-panel="dane" hidden>
-          <h2>Dane</h2>
+        <section data-panel="data" hidden>
+          <h2 data-i18n="settings.data"></h2>
           <div class="storage-row">
             <div>
-              <strong>Biblioteka</strong>
+              <strong data-i18n="data.library"></strong>
               <div id="data-info" class="muted small"></div>
               <code id="data-path"></code>
             </div>
-            <button type="button" data-open="data">Otwórz folder</button>
+            <button type="button" data-open="data" data-i18n="data.open"></button>
           </div>
           <div class="storage-row">
             <div>
-              <strong>Modele</strong>
+              <strong data-i18n="data.models"></strong>
               <div id="models-info" class="muted small"></div>
               <code id="models-path"></code>
             </div>
-            <button type="button" data-open="models">Otwórz folder</button>
+            <button type="button" data-open="models" data-i18n="data.open"></button>
           </div>
-          <p class="muted small">Twoje oryginalne pliki zostają tam, gdzie były. Aplikacja trzyma kopię ścieżki
-            dźwiękowej, podgląd do odsłuchu i transkrypcję; „Usuń z biblioteki” kasuje je dla danego pliku.</p>
+          <p class="muted small" data-i18n="data.note"></p>
         </section>
       </div>
     </div>
-    <div class="settings-foot"><button id="settings-close" type="button">Zamknij</button></div>
+    <div class="settings-foot"><button id="settings-close" type="button" data-i18n="settings.close"></button></div>
   </dialog>
 
-  <dialog id="retranscribe-dialog">
-    <h2 class="dialog-title">Ponowna transkrypcja</h2>
-    <p id="retranscribe-file" class="muted"></p>
-    <label class="field">Model
-      <select id="rt-model"></select>
-    </label>
-    <label class="field">Język nagrania
-      <select id="rt-language"></select>
-    </label>
-    <div class="actions end">
-      <button id="rt-cancel" type="button">Anuluj</button>
-      <button id="rt-start" class="primary" type="button">Transkrybuj</button>
-    </div>
+  <!-- Przed każdą transkrypcją: język nagrania i model dla tego jednego pliku. -->
+  <dialog id="transcribe-dialog">
+    <form method="dialog">
+      <h2 id="transcribe-title" class="dialog-title"></h2>
+      <p id="transcribe-file" class="muted"></p>
+      <label class="field"><span data-i18n="dialog.language"></span>
+        <select id="transcribe-language" autofocus></select>
+      </label>
+      <p class="muted small" data-i18n="dialog.note"></p>
+      <label class="field"><span data-i18n="dialog.model"></span>
+        <select id="transcribe-model"></select>
+      </label>
+      <div class="actions end">
+        <button value="cancel" data-i18n="dialog.cancel"></button>
+        <button value="start" class="primary" data-i18n="dialog.start"></button>
+      </div>
+    </form>
   </dialog>
 
   <script type="module" src="/static/app.js"></script>

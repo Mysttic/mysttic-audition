@@ -1,80 +1,112 @@
-# Historia zmian
+# Changelog
 
-Wszystko, co warto wiedzieć o kolejnych wydaniach Mysttic Audition. Format według
-[Keep a Changelog](https://keepachangelog.com/pl/1.1.0/), numeracja według
-[wersjonowania semantycznego](https://semver.org/lang/pl/).
+Everything worth knowing about each Mysttic Audition release. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and version numbers follow
+[Semantic Versioning](https://semver.org/).
 
-Numer wydania jest w [VERSION.md](VERSION.md): jego zmiana na gałęzi `main` uruchamia
-wydanie. Treść sekcji danej wersji trafia do opisu wydania i do okna aktualizacji
-w aplikacji.
+The release number is in [VERSION.md](VERSION.md): changing it on the `main` branch triggers a
+release. The section for a version becomes the release description and the update notes shown
+in the app.
+
+## [0.4.0] - 2026-10-28
+
+The interface is in English by default, with Polish to choose in Settings, and the language of
+each recording is chosen before its transcription, independently of the interface language. The
+documentation is in English too, with a Polish translation of the README.
+
+### Added
+- **Recording language chosen for each file.** Opening or dropping a file shows a dialog where
+  you choose the language spoken in the recording and the model; only then is the file sent for
+  transcription. "Transcribe again" uses the same dialog, with the file's last choice
+  preselected.
+- **Interface language** in a new General section of Settings: English or Polish. The change
+  applies at once, without a restart, and is saved in `data/ustawienia.json`.
+- **README.pl.md**, the Polish translation of the README.
+
+### Changed
+- **English by default.** After updating from 0.3.0 the interface is in English; Polish is in
+  Settings, General section.
+- The Transcription section of Settings holds only the defaults preselected in the new dialog.
+  The default recording language is now "Detect automatically"; a language you have already
+  chosen in Settings stays.
+- Messages from the app (errors, statuses, dates, numbers and file sizes) follow the interface
+  language. Error messages saved by earlier versions stay as they were.
+- Messages shown outside the window (a failed start, a failed update installation) follow the
+  interface language, and the console that installs the dependencies is in English.
+- The changelog, the version file and the rest of the documentation are in English.
 
 ## [0.3.0] - 2026-10-28
 
-Okno ustawień zamiast przełączników rozrzuconych po głównym oknie. Główne okno zostaje przy
-pracy z nagraniem: otwieranie, biblioteka, odtwarzanie, szukanie i fragmenty.
+A Settings window instead of switches scattered around the main window. The main window is left
+for working with a recording: opening, the library, playback, search and fragments.
 
-### Dodane
-- **Okno ustawień** (przycisk „Ustawienia” w nagłówku albo Ctrl+,) z sekcjami Transkrypcja,
-  Odtwarzanie, Aktualizacje i Dane.
-- **Sekcja Dane:** zajętość biblioteki i pobranych modeli oraz przyciski otwierające ich foldery.
-- **Lista skrótów klawiszowych** w sekcji Odtwarzanie.
-- **Ponowna transkrypcja** pyta o model i język w osobnym okienku, tylko dla tego pliku.
+### Added
+- **Settings window** (the "Settings" button in the header, or Ctrl+,) with Transcription,
+  Playback, Updates and Data sections.
+- **Data section:** the space taken by the library and the downloaded models, and buttons that
+  open their folders.
+- **List of keyboard shortcuts** in the Playback section.
+- **Transcribe again** asks for the model and language in a small dialog, for that file only.
 
-### Zmienione
-- Model i język przeniesione z nagłówka do ustawień. Ustawienia zapisują się w
-  `data/ustawienia.json`, więc nie zależą od profilu okna ani portu.
-- Sprawdzanie aktualizacji przeniesione do ustawień. Znacznik nowej wersji w nagłówku i kropka
-  przy sekcji Aktualizacje prowadzą prosto do niej.
-- „Przewijaj tekst” przeniesione spod przebiegu fali do ustawień.
+### Changed
+- Model and language moved from the header to Settings. Settings are saved in
+  `data/ustawienia.json`, so they don't depend on the window profile or the port.
+- Update checking moved to Settings. The new version badge in the header and the dot next to
+  the Updates section lead straight to it.
+- "Scroll text" moved from under the waveform to Settings.
 
-### Usunięte
-- Okno „O aplikacji”: numer wersji i aktualizacje są w ustawieniach.
+### Removed
+- The "About" window: the version number and updates are in Settings.
 
 ## [0.2.0] - 2026-10-28
 
-Aplikacja desktopowa zamiast strony w przeglądarce. Startuje dwuklikiem w jednym pliku,
-działa we własnym oknie i kończy się w całości razem z nim. Do tego ikona, numer wersji
-i automatyczne aktualizacje z huba wydań Mysttic.
+A desktop app instead of a page in the browser. It starts with a double-click on a single file,
+runs in its own window and ends completely together with it. Plus an icon, a version number and
+automatic updates from the Mysttic release hub.
 
-### Dodane
-- **Własne okno** (pywebview z Edge WebView2) z ikoną aplikacji na pasku tytułu i pasku zadań.
-- **Start dwuklikiem w `mysttic-audition.pyw`**, bez konsoli. Pierwsze uruchomienie i każda
-  zmiana `requirements.txt` instalują zależności w widocznym oknie (`instaluj.bat`).
-- **Jedna kopia aplikacji:** ponowne uruchomienie przywraca istniejące okno.
-- **Eksport przez okno „Zapisz jako”**, domyślnie w folderze Pobrane.
-- **Numer wersji** w nagłówku i w oknie „O aplikacji”. Jedynym źródłem jest `VERSION.md`.
-- **Aktualizacje:** raz na dobę (opcja do wyłączenia) aplikacja sprawdza publiczne wydania
-  w `Mysttic/Mysttic`, pobiera nowszą paczkę, sprawdza jej sumę SHA-256 i instaluje ją przy
-  następnym uruchomieniu albo od razu przyciskiem „Uruchom ponownie i zainstaluj”. Dane,
-  modele i środowisko Pythona zostają nietknięte.
-- **Wydania z GitHub Actions:** paczka zip z sumami, wydanie w repozytorium projektu i kopia
-  w hubie `Mysttic/Mysttic`, skąd korzystają strona i aktualizacja w aplikacji.
-- Dziennik `data/app.log` i okienko z opisem błędu, gdy start się nie uda.
+### Added
+- **Its own window** (pywebview with Edge WebView2) with the app icon in the title bar and on
+  the taskbar.
+- **Start by double-clicking `mysttic-audition.pyw`**, without a console. The first start and
+  every change to `requirements.txt` install the dependencies in a visible window
+  (`instaluj.bat`).
+- **A single instance:** starting the app again brings the existing window back.
+- **Export through the "Save As" dialog**, in the Downloads folder by default.
+- **Version number** in the header and in the "About" window. Its only source is `VERSION.md`.
+- **Updates:** once a day (an option you can turn off) the app checks the public releases in
+  `Mysttic/Mysttic`, downloads a newer package, verifies its SHA-256 checksum and installs it at
+  the next start, or right away with the "Restart and install" button. Data, models and the
+  Python environment stay untouched.
+- **Releases from GitHub Actions:** a zip package with checksums, a release in the project
+  repository and a copy in the `Mysttic/Mysttic` hub, which the project page and the update
+  check in the app use.
+- The `data/app.log` log and a message box describing the error when the start fails.
 
-### Zmienione
-- Zamknięcie okna kończy cały proces: serwer, transkrypcję, ffmpeg i pamięć zajętą przez model.
-  Procesy potomne są w obiekcie zadania Windows, więc nie przeżywają nawet awarii. Przerwana
-  transkrypcja wraca do kolejki przy następnym starcie.
-- Port 8791, a gdy jest zajęty, wolny port przydzielony przez system.
+### Changed
+- Closing the window ends the whole process: the server, transcription, ffmpeg and the memory
+  used by the model. Child processes are in a Windows job object, so they don't outlive even a
+  crash. An interrupted transcription goes back to the queue at the next start.
+- Port 8791, or a free port assigned by the system when it is taken.
 
-### Usunięte
-- `uruchom.bat` i otwieranie aplikacji w przeglądarce. Do pracy nad kodem zostaje tryb
-  `app.py --server`.
+### Removed
+- `uruchom.bat` and opening the app in the browser. For working on the code there is the
+  `app.py --server` mode.
 
 ## [0.1.0] - 2026-10-28
 
-Pierwszy prototyp, działający w przeglądarce. Nie był publikowany.
+The first prototype, running in the browser. It was not published.
 
-### Dodane
-- Wczytywanie plików audio i wideo (MP3, WAV, M4A, FLAC, MP4, MKV, MOV, AVI i inne). Dźwięk
-  z wideo jest wyciągany automatycznie przez ffmpeg, bez ręcznej konwersji.
-- Lokalna transkrypcja faster-whisper (large-v3-turbo na procesorze) z czasem każdego słowa.
-  Tekst pojawia się na bieżąco, a kliknięcie słowa odtwarza nagranie od tego miejsca.
-- Przebieg fali z przybliżaniem (wavesurfer.js) i bezstratny podgląd FLAC do odsłuchu.
-- Wyszukiwanie słów i fraz, odporne na wielkość liter, polskie znaki i odmianę.
-- Fragmenty zaznaczane na fali albo z wyników wyszukiwania, pętla i porównanie A/B klawiszami.
-- Eksport fragmentu: WAV co do próbki albo oryginalny kodek bez ponownego kodowania.
-- Biblioteka wcześniej otwartych plików.
+### Added
+- Loading audio and video files (MP3, WAV, M4A, FLAC, MP4, MKV, MOV, AVI and more). The audio of
+  a video is extracted automatically with ffmpeg, without manual conversion.
+- Local faster-whisper transcription (large-v3-turbo on the CPU) with the timing of every word.
+  Text appears as it is recognised, and clicking a word plays the recording from there.
+- A zoomable waveform (wavesurfer.js) and a lossless FLAC preview for listening.
+- Word and phrase search, insensitive to case, Polish characters and word forms.
+- Fragments marked on the waveform or from search results, a loop and A/B comparison with keys.
+- Fragment export: WAV exact to the sample, or the original codec without re-encoding.
+- A library of previously opened files.
 
+[0.4.0]: https://github.com/Mysttic/mysttic-audition/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Mysttic/mysttic-audition/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Mysttic/mysttic-audition/releases/tag/v0.2.0

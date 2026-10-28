@@ -1,27 +1,19 @@
 import WaveSurfer from './vendor/wavesurfer.esm.js'
 import RegionsPlugin from './vendor/regions.esm.js'
 import TimelinePlugin from './vendor/timeline.esm.js'
+import { UI_LANGUAGES, applyStatic, has, language, locale, num, problemText, setLanguage, t } from './i18n.js'
 
 const $ = (selector) => document.querySelector(selector)
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const FRAGMENT_COLOR = 'rgba(90, 169, 255, 0.22)'
 const HIT_COLOR = 'rgba(245, 197, 66, 0.32)'
-const MODEL_OPTIONS = [
-  ['large-v3-turbo', 'large-v3-turbo (zalecany)', 'Dobra jakość dla polskiego, transkrypcja trwa ok. 1/4 długości nagrania. Plik modelu: 1,6 GB.'],
-  ['small', 'small (szybki, słabszy)', 'Kilka razy szybszy od turbo, ale wyraźnie słabszy dla polskiego. Plik modelu: ok. 0,5 GB.'],
-  ['medium', 'medium', 'Pośredni między small a turbo. Plik modelu: ok. 1,5 GB.'],
-  ['large-v3', 'large-v3 (najdokładniejszy, wolny)', 'Najdokładniejszy, kilka razy wolniejszy od turbo. Plik modelu: ok. 3,1 GB.'],
-]
-const LANGUAGE_OPTIONS = [
-  ['pl', 'polski'], ['auto', 'wykryj automatycznie'], ['en', 'angielski'], ['de', 'niemiecki'],
-  ['uk', 'ukraiński'], ['ru', 'rosyjski'], ['cs', 'czeski'], ['sk', 'słowacki'],
-  ['fr', 'francuski'], ['es', 'hiszpański'], ['it', 'włoski'],
-]
-const LANG_NAMES = Object.fromEntries(LANGUAGE_OPTIONS)
+// Te same wartości co MODELS i LANGUAGES w app.py; nazwy i opisy są w słownikach static/i18n.
+const MODELS = ['large-v3-turbo', 'small', 'medium', 'large-v3']
+const LANGUAGES = ['auto', 'en', 'pl', 'de', 'uk', 'ru', 'cs', 'sk', 'fr', 'es', 'it']
 
 // Ustawienia trzyma serwer w data/ustawienia.json; tu ich kopia do bieżącej pracy.
-let appSettings = { model: 'large-v3-turbo', language: 'pl', follow: true }
+let appSettings = { ui_language: 'en', model: 'large-v3-turbo', language: 'auto', follow: true }
 
 const state = {
   openId: null,     // plik, który właśnie się otwiera lub jest otwarty
@@ -31,6 +23,7 @@ const state = {
   words: [],        // {w, s, e, p, n: tekst znormalizowany, el: <span>}
   segCount: 0,
   curWord: -1,
+  job: null,        // ostatni stan transkrypcji otwartego pliku
   hits: [],         // {from, to}: indeksy w state.words
   hitIdx: -1,
   hitRegion: null,
@@ -47,8 +40,7 @@ async function api(path, options) {
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`
     try {
-      const detail = (await res.json()).detail
-      if (typeof detail === 'string') message = detail
+      message = problemText((await res.json()).detail) || message
     } catch {}
     throw new Error(message)
   }
@@ -68,9 +60,13 @@ function formatDuration(seconds) {
   return s >= 60 ? `${Math.floor(s / 60)} min ${s % 60} s` : `${s} s`
 }
 
-function setStatus(message, isError = false) {
+// Pasek stanu pamięta, jak zbudować swój tekst, żeby po zmianie języka wypisać go od nowa.
+let statusText = () => ''
+
+function setStatus(text, isError = false) {
+  statusText = typeof text === 'function' ? text : () => text
   const el = $('#status')
-  el.textContent = message
+  el.textContent = statusText()
   el.classList.toggle('error', isError)
 }
 
@@ -115,41 +111,65 @@ async function refreshLibrary() {
   try {
     const files = await (await api('/api/files')).json()
     const select = $('#library')
-    select.replaceChildren(new Option(files.length ? `Biblioteka (${files.length})` : 'Biblioteka jest pusta', ''))
+    select.replaceChildren(new Option(files.length ? t('library.count', { n: files.length }) : t('library.empty'), ''))
     for (const f of files) {
       let note = ''
-      if (f.status === 'error' || f.transcript.status === 'error') note = ' [błąd]'
-      else if (f.status !== 'ready' || f.transcript.status !== 'done') note = ' [w toku]'
+      if (f.status === 'error' || f.transcript.status === 'error') note = ` [${t('library.tag_error')}]`
+      else if (f.status !== 'ready' || f.transcript.status !== 'done') note = ` [${t('library.tag_pending')}]`
       const length = f.duration ? ` (${fmt(f.duration)})` : ''
       select.append(new Option(f.name + length + note, f.id))
     }
     select.value = state.openId ?? ''
   } catch (err) {
-    setStatus(`Biblioteka: ${err.message}`, true)
+    setStatus(t('library.error', { message: err.message }), true)
   }
 }
 
-function upload(file) {
-  const params = new URLSearchParams({ model: appSettings.model, language: appSettings.language })
+// Okienko przed każdą transkrypcją: język nagrania i model dla tego jednego pliku. Język nagrania
+// nie zależy od języka interfejsu; ustawienia podsuwają tylko wybór na start.
+let resolveTranscription = null
+
+function askTranscription(fileName, { again = false, model, language }) {
+  const dialog = $('#transcribe-dialog')
+  $('#transcribe-title').textContent = t(again ? 'dialog.heading_again' : 'dialog.heading_new')
+  $('#transcribe-file').textContent = fileName
+  $('#transcribe-language').value = language
+  $('#transcribe-model').value = model
+  dialog.returnValue = ''
+  dialog.showModal()
+  return new Promise((resolve) => { resolveTranscription = resolve })
+}
+
+// Plik trafia do aplikacji dopiero po wyborze języka nagrania.
+async function addFile(file) {
+  if (document.querySelector('dialog[open]')) return
+  const choice = await askTranscription(file.name, { model: appSettings.model, language: appSettings.language })
+  if (choice) upload(file, choice)
+}
+
+function upload(file, choice) {
+  const params = new URLSearchParams(choice)
   const xhr = new XMLHttpRequest()
   xhr.open('PUT', `/api/files?${params}`)
   xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name))
   xhr.upload.onprogress = (event) => {
-    if (event.lengthComputable) setStatus(`Wysyłanie ${file.name}: ${Math.round((event.loaded / event.total) * 100)}%`)
+    if (!event.lengthComputable) return
+    const pct = Math.round((event.loaded / event.total) * 100)
+    setStatus(() => t('upload.progress', { name: file.name, pct }))
   }
   xhr.onload = () => {
     if (xhr.status !== 200) {
       let message = xhr.statusText
-      try { message = JSON.parse(xhr.responseText).detail || message } catch {}
-      setStatus(`Nie udało się dodać pliku: ${message}`, true)
+      try { message = problemText(JSON.parse(xhr.responseText).detail) || message } catch {}
+      setStatus(t('upload.failed', { message }), true)
       return
     }
     const meta = JSON.parse(xhr.responseText)
     openFile(meta.id)
     refreshLibrary()
   }
-  xhr.onerror = () => setStatus('Błąd wysyłania pliku do aplikacji.', true)
-  setStatus(`Wysyłanie ${file.name}…`)
+  xhr.onerror = () => setStatus(() => t('upload.error'), true)
+  setStatus(() => t('upload.sending', { name: file.name }))
   xhr.send(file)
 }
 
@@ -165,8 +185,13 @@ async function openFile(id) {
       meta = await (await api(`/api/files/${id}`)).json()
       if (token !== state.token) return
       if (meta.status === 'ready') break
-      if (meta.status === 'error') throw new Error(`${meta.name}: ${meta.error}`)
-      setStatus(`${meta.name}: wyciąganie dźwięku…`)
+      const name = meta.name
+      if (meta.status === 'error') {
+        const error = meta.error
+        setStatus(() => `${name}: ${problemText(error)}`, true)
+        return
+      }
+      setStatus(() => t('file.extracting', { name }))
       await sleep(800)
     }
     const bytes = new Uint8Array(await (await api(`/api/files/${id}/peaks`)).arrayBuffer())
@@ -195,6 +220,7 @@ function closeFile() {
   $('#hits').replaceChildren()
   $('#hits-info').textContent = ''
   renderFragments()
+  updatePlayButton(false)
   $('#workspace').hidden = true
   $('#empty').hidden = false
 }
@@ -204,11 +230,11 @@ function showFile(meta) {
   $('#workspace').hidden = false
   $('#file-name').textContent = meta.name
   const a = meta.audio
-  const channels = a.channels === 1 ? 'mono' : a.channels === 2 ? 'stereo' : `${a.channels} kanałów`
-  const parts = [fmt(meta.duration), `${a.codec}, ${a.sample_rate / 1000} kHz, ${channels}`]
-  if (a.bits === 24) parts.push('24 bity')
-  if (a.has_video) parts.push('dźwięk wyciągnięty z wideo')
-  if (a.audio_tracks > 1) parts.push(`ścieżka 1 z ${a.audio_tracks}`)
+  const channels = a.channels === 1 ? t('file.mono') : a.channels === 2 ? t('file.stereo') : t('file.channels', { n: a.channels })
+  const parts = [fmt(meta.duration), `${a.codec}, ${num(a.sample_rate / 1000)} kHz, ${channels}`]
+  if (a.bits === 24) parts.push(t('file.bits24'))
+  if (a.has_video) parts.push(t('file.from_video'))
+  if (a.audio_tracks > 1) parts.push(t('file.track', { n: a.audio_tracks }))
   $('#file-info').textContent = parts.join(' · ')
 }
 
@@ -233,10 +259,10 @@ function createPlayer(meta, peaks) {
   $('#time').textContent = `${fmt(0)} / ${fmt(meta.duration)}`
 
   ws.on('timeupdate', onTime)
-  ws.on('play', () => { $('#play').textContent = '❚❚ Pauza' })
-  ws.on('pause', () => { $('#play').textContent = '▶ Odtwórz' })
+  ws.on('play', () => updatePlayButton(true))
+  ws.on('pause', () => updatePlayButton(false))
   ws.on('interaction', () => setActive(null))
-  ws.on('error', (err) => setStatus(`Odtwarzanie: ${err.message}`, true))
+  ws.on('error', (err) => setStatus(t('player.error', { message: err.message }), true))
 
   regions.enableDragSelection({ color: FRAGMENT_COLOR })
   regions.on('region-created', (region) => {
@@ -257,6 +283,10 @@ function createPlayer(meta, peaks) {
     event.stopPropagation()
     playRegion(region)
   })
+}
+
+function updatePlayButton(playing = state.ws?.isPlaying()) {
+  $('#play').textContent = t(playing ? 'player.pause' : 'player.play')
 }
 
 function onTime(time) {
@@ -297,6 +327,7 @@ function resetTranscript() {
   state.words = []
   state.segCount = 0
   state.curWord = -1
+  state.job = null
   state.hits = []
   state.hitIdx = -1
   $('#transcript').replaceChildren()
@@ -317,28 +348,45 @@ async function pollTranscript(token) {
     }
   } catch (err) {
     if (token !== state.token) return
-    $('#tr-status').textContent = `Błąd odczytu transkrypcji: ${err.message}`
+    $('#tr-status').textContent = t('transcript.read_error', { message: err.message })
   }
   state.pollTimer = setTimeout(() => pollTranscript(token), 1500)
 }
 
-function showTranscriptStatus(t) {
+// Nazwa języka nagrania; Whisper wykrywa też języki spoza listy w ustawieniach.
+function languageName(code) {
+  if (has(`languages.${code}`)) return t(`languages.${code}`)
+  try {
+    return new Intl.DisplayNames([locale()], { type: 'language' }).of(code) || code
+  } catch {
+    return code
+  }
+}
+
+function showTranscriptStatus(job) {
+  state.job = job
   let text = ''
-  if (t.status === 'waiting') text = 'Czeka na przygotowanie dźwięku…'
-  else if (t.status === 'queued') text = `W kolejce, model ${t.model}…`
-  else if (t.status === 'running' && t.phase === 'model') {
-    text = `Ładowanie modelu ${t.model}. Za pierwszym razem model jest pobierany, to może potrwać kilka minut…`
-  } else if (t.status === 'running') {
-    text = `Transkrypcja ${Math.round((t.progress || 0) * 100)}%, model ${t.model}. Tekst pojawia się na bieżąco.`
-  } else if (t.status === 'done') {
-    const lang = LANG_NAMES[t.detected_language] || t.detected_language
-    const ratio = (t.seconds / state.file.duration).toFixed(2).replace('.', ',')
-    text = `Gotowe: model ${t.model}, język ${lang}, czas ${formatDuration(t.seconds)} (${ratio} × długość nagrania).`
-  } else if (t.status === 'error') text = `Błąd transkrypcji: ${t.error}`
+  if (job.status === 'waiting') text = t('transcript.waiting')
+  else if (job.status === 'queued') text = t('transcript.queued', { model: job.model })
+  else if (job.status === 'running' && job.phase === 'model') text = t('transcript.loading', { model: job.model })
+  else if (job.status === 'running') {
+    text = t('transcript.running', { pct: Math.round((job.progress || 0) * 100), model: job.model })
+  } else if (job.status === 'done') {
+    text = t('transcript.done', {
+      model: job.model,
+      language: languageName(job.detected_language),
+      duration: formatDuration(job.seconds),
+      ratio: num(job.seconds / state.file.duration, 2),
+    })
+  } else if (job.status === 'error') text = t('transcript.failed', { message: problemText(job.error) })
   const el = $('#tr-status')
   el.textContent = text
-  el.classList.toggle('error', t.status === 'error')
-  $('#retranscribe').disabled = t.status !== 'done' && t.status !== 'error'
+  el.classList.toggle('error', job.status === 'error')
+  $('#retranscribe').disabled = job.status !== 'done' && job.status !== 'error'
+}
+
+function confidenceTitle(p) {
+  return t('transcript.confidence', { pct: Math.round(p * 100) })
 }
 
 function appendSegments(segments) {
@@ -357,7 +405,7 @@ function appendSegments(segments) {
       if (lead) p.append(lead)
       const span = document.createElement('span')
       span.className = word.p < 0.5 ? 'w unsure' : 'w'
-      if (word.p < 0.5) span.title = `Pewność rozpoznania ${Math.round(word.p * 100)}%`
+      if (word.p < 0.5) span.title = confidenceTitle(word.p)
       span.textContent = word.w.slice(lead.length)
       span.dataset.i = state.words.length
       state.words.push({ ...word, n: norm(word.w), el: span })
@@ -429,8 +477,8 @@ function renderHits() {
   const words = state.words
   const query = $('#search').value.trim()
   let info = ''
-  if (query && !state.hits.length) info = state.words.length ? 'Brak wyników.' : 'Brak wyników (transkrypcja jeszcze trwa).'
-  else if (query) info = `Wyników: ${state.hits.length}. Enter: następny, Shift+Enter: poprzedni.`
+  if (query && !state.hits.length) info = t(state.words.length ? 'search.none' : 'search.none_pending')
+  else if (query) info = t('search.count', { n: state.hits.length })
   $('#hits-info').textContent = info
   state.hits.slice(0, 500).forEach((hit, i) => {
     const li = document.createElement('li')
@@ -455,7 +503,7 @@ function renderHits() {
       ctx.append(lead, mark)
     }
     if (b < words.length - 1) ctx.append('…')
-    li.append(time, ctx, button('+', 'Dodaj jako fragment do porównania lub eksportu', () => addHitAsFragment(hit)))
+    li.append(time, ctx, button('+', t('search.add'), () => addHitAsFragment(hit)))
     li.addEventListener('click', () => playHit(i))
     list.append(li)
   })
@@ -512,14 +560,14 @@ function renderFragments() {
     range.textContent = `${fmt(region.start)} → ${fmt(region.end)}`
     const length = document.createElement('span')
     length.className = 'muted'
-    length.textContent = `${(region.end - region.start).toFixed(1)} s`
+    length.textContent = `${num(region.end - region.start, 1)} s`
     li.append(
       badge, range, length,
-      button('▶', `Odtwórz (klawisz ${n})`, () => playRegion(region)),
-      button('WAV', 'Pobierz fragment wycięty co do próbki, bez kompresji', () => exportRegion(region, 'wav')),
-      button('Oryginał', 'Pobierz fragment w oryginalnym kodeku, bez ponownego kodowania (granice z dokładnością do ramki, ok. 20 do 30 ms)',
+      button('▶', t('fragments.play', { n }), () => playRegion(region)),
+      button('WAV', t('fragments.wav_title'), () => exportRegion(region, 'wav')),
+      button(t('fragments.original'), t('fragments.original_title'),
         () => exportRegion(region, 'copy'), !state.file?.has_original),
-      button('✕', 'Usuń fragment', () => region.remove()),
+      button('✕', t('fragments.remove'), () => region.remove()),
     )
     list.append(li)
   })
@@ -536,7 +584,7 @@ function fileNameFrom(disposition) {
 
 async function exportRegion(region, mode) {
   const params = new URLSearchParams({ start: region.start.toFixed(3), end: region.end.toFixed(3), mode })
-  setStatus('Przygotowywanie pliku…')
+  setStatus(() => t('export.preparing'))
   try {
     const res = await api(`/api/files/${state.file.id}/export?${params}`)
     const name = fileNameFrom(res.headers.get('content-disposition')) || 'fragment'
@@ -546,9 +594,9 @@ async function exportRegion(region, mode) {
     link.click()
     link.remove()
     setTimeout(() => URL.revokeObjectURL(url), 10_000)
-    setStatus(`Eksport fragmentu: ${name}`)
+    setStatus(() => t('export.done', { name }))
   } catch (err) {
-    setStatus(`Eksport: ${err.message}`, true)
+    setStatus(t('export.failed', { message: err.message }), true)
   }
 }
 
@@ -556,7 +604,7 @@ async function exportRegion(region, mode) {
 
 $('#file-input').addEventListener('change', (event) => {
   const file = event.target.files[0]
-  if (file) upload(file)
+  if (file) addFile(file)
   event.target.value = ''
 })
 
@@ -576,7 +624,7 @@ window.addEventListener('drop', (event) => {
   dragDepth = 0
   document.body.classList.remove('dragging')
   const file = event.dataTransfer?.files?.[0]
-  if (file) upload(file)
+  if (file) addFile(file)
 })
 
 $('#library').addEventListener('change', (event) => {
@@ -614,24 +662,27 @@ $('#search').addEventListener('keydown', (event) => {
 })
 $('#exact').addEventListener('change', () => runSearch(true))
 
-// Ponowna transkrypcja pyta o model i język tylko dla tego pliku; domyślne są w ustawieniach.
-$('#retranscribe').addEventListener('click', () => {
-  if (!state.file) return
-  $('#retranscribe-file').textContent = state.file.name
-  $('#rt-model').value = state.file.transcript?.model || appSettings.model
-  $('#rt-language').value = appSettings.language
-  $('#retranscribe-dialog').showModal()
+$('#transcribe-dialog').addEventListener('close', () => {
+  const start = $('#transcribe-dialog').returnValue === 'start'
+  resolveTranscription?.(start ? { model: $('#transcribe-model').value, language: $('#transcribe-language').value } : null)
+  resolveTranscription = null
 })
-$('#rt-cancel').addEventListener('click', () => $('#retranscribe-dialog').close())
-$('#rt-start').addEventListener('click', async () => {
+
+// Ponowna transkrypcja zaczyna od tego, co ten plik miał wybrane ostatnio.
+$('#retranscribe').addEventListener('click', async () => {
   const file = state.file
-  $('#retranscribe-dialog').close()
   if (!file) return
+  const choice = await askTranscription(file.name, {
+    again: true,
+    model: state.job?.model || appSettings.model,
+    language: state.job?.language || appSettings.language,
+  })
+  if (!choice || state.file !== file) return
   try {
     await api(`/api/files/${file.id}/transcribe`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: $('#rt-model').value, language: $('#rt-language').value }),
+      body: JSON.stringify(choice),
     })
     clearTimeout(state.pollTimer)
     state.token++
@@ -645,12 +696,12 @@ $('#rt-start').addEventListener('click', async () => {
 
 $('#delete').addEventListener('click', async () => {
   const file = state.file
-  if (!file || !confirm(`Usunąć „${file.name}” z biblioteki aplikacji? Oryginalny plik na dysku zostaje.`)) return
+  if (!file || !confirm(t('library.delete_confirm', { name: file.name }))) return
   closeFile()
   history.replaceState(null, '', location.pathname)
   try {
     await api(`/api/files/${file.id}`, { method: 'DELETE' })
-    setStatus(`Usunięto z biblioteki: ${file.name}`)
+    setStatus(() => t('library.deleted', { name: file.name }))
   } catch (err) {
     setStatus(err.message, true)
   }
@@ -686,8 +737,9 @@ document.addEventListener('keydown', (event) => {
 
 let updateTimer
 let updatedShown = false
-const formatDay = (value) => new Date(value).toLocaleDateString('pl-PL')
-const formatMoment = (value) => new Date(value).toLocaleString('pl-PL', { dateStyle: 'short', timeStyle: 'short' })
+let lastUpdate = null  // ostatni stan z /api/update, do ponownego wypisania po zmianie języka
+const formatDay = (value) => new Date(value).toLocaleDateString(locale())
+const formatMoment = (value) => new Date(value).toLocaleString(locale(), { dateStyle: 'short', timeStyle: 'short' })
 
 // Sekcja CHANGELOG.md jako zwykły tekst: nagłówki, punkty i akapity, bez wstawiania HTML.
 function renderNotes(container, text) {
@@ -705,24 +757,36 @@ function renderNotes(container, text) {
   }
 }
 
+function updateText(u) {
+  const r = u.release
+  if (u.status === 'idle') return t(u.auto ? 'updates.idle_auto' : 'updates.idle_off')
+  if (u.status === 'checking') return t('updates.checking')
+  if (u.status === 'up_to_date') return t('updates.latest')
+  if (u.status === 'failed') return t('updates.failed', { message: problemText(u.error) })
+  if (!r) return ''
+  if (u.status === 'available') {
+    return r.published
+      ? t('updates.available_date', { version: r.version, date: formatDay(r.published) })
+      : t('updates.available', { version: r.version })
+  }
+  if (u.status === 'downloading') {
+    return u.progress != null
+      ? t('updates.downloading_pct', { version: r.version, pct: Math.round(u.progress * 100) })
+      : t('updates.downloading', { version: r.version })
+  }
+  return u.status === 'ready' ? t('updates.ready', { version: r.version }) : ''
+}
+
 function renderUpdate(u) {
+  lastUpdate = u
   const r = u.release
   $('#app-version').textContent = `v${u.current}`
-  $('#settings-version').textContent = `Wersja ${u.current}`
+  $('#settings-version').textContent = t('settings.version', { version: u.current })
   $('#current-version').textContent = u.current
   $('#update-site').href = u.site
-  const texts = {
-    idle: u.auto ? 'Aplikacja sama sprawdzi, czy jest nowsza wersja.' : 'Automatyczne sprawdzanie jest wyłączone.',
-    checking: 'Sprawdzanie…',
-    up_to_date: 'Masz najnowszą wersję.',
-    available: r && `Dostępna jest wersja ${r.version}${r.published ? ` z ${formatDay(r.published)}` : ''}.`,
-    downloading: r && `Pobieranie wersji ${r.version}${u.progress != null ? `: ${Math.round(u.progress * 100)}%` : '…'}`,
-    ready: r && `Wersja ${r.version} jest pobrana i sprawdzona. Zainstaluje się przy następnym uruchomieniu.`,
-    failed: `Nie udało się: ${u.error}`,
-  }
-  let text = texts[u.status] || ''
+  let text = updateText(u)
   if (u.last_check && (u.status === 'idle' || u.status === 'up_to_date')) {
-    text += ` Ostatnie sprawdzenie: ${formatMoment(u.last_check * 1000)}.`
+    text += ` ${t('updates.last_check', { when: formatMoment(u.last_check * 1000) })}`
   }
   $('#update-status').textContent = text
   $('#update-status').classList.toggle('error', u.status === 'failed')
@@ -740,11 +804,11 @@ function renderUpdate(u) {
   $('#update-auto').checked = u.auto
   const pill = $('#update-pill')
   pill.hidden = !r || !['available', 'downloading', 'ready'].includes(u.status)
-  if (r) pill.textContent = u.status === 'ready' ? `Wersja ${r.version} gotowa do instalacji` : `Dostępna wersja ${r.version}`
+  if (r) pill.textContent = t(u.status === 'ready' ? 'updates.pill_ready' : 'updates.pill_available', { version: r.version })
   $('#update-dot').hidden = pill.hidden
   if (u.updated_from && !updatedShown) {
     updatedShown = true
-    setStatus(`Zaktualizowano z wersji ${u.updated_from} do ${u.current}.`)
+    setStatus(() => t('updates.updated', { from: u.updated_from, to: u.current }))
   }
 }
 
@@ -776,14 +840,14 @@ async function updateAction(path, body) {
 }
 
 $('#update-check').addEventListener('click', () => {
-  $('#update-status').textContent = 'Sprawdzanie…'
+  $('#update-status').textContent = t('updates.checking')
   $('#update-status').classList.remove('error')
   updateAction('/api/update/check')
 })
 $('#update-download').addEventListener('click', () => updateAction('/api/update/download'))
 $('#update-auto').addEventListener('change', (event) => updateAction('/api/update/settings', { auto: event.target.checked }))
 $('#update-restart').addEventListener('click', async () => {
-  $('#update-status').textContent = 'Zamykanie i instalacja…'
+  $('#update-status').textContent = t('updates.restarting')
   try {
     await api('/api/update/restart', { method: 'POST' })
   } catch (err) {
@@ -796,21 +860,35 @@ $('#update-restart').addEventListener('click', async () => {
 let storageInfo = null
 
 function formatBytes(bytes) {
-  return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1).replace('.', ',')} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`
-}
-
-function plural(n, one, few, many) {
-  if (n === 1) return one
-  return n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many
+  return bytes >= 1e9 ? `${num(bytes / 1e9, 1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`
 }
 
 function fillSelect(select, options) {
-  select.replaceChildren(...options.map(([value, label]) => new Option(label, value)))
+  const value = select.value
+  select.replaceChildren(...options.map(([optionValue, label]) => new Option(label, optionValue)))
+  if (value) select.value = value
+}
+
+function fillOptions() {
+  const models = MODELS.map((name) => [name, t(`models.${name}`)])
+  const languages = LANGUAGES.map((code) => [code, t(`languages.${code}`)])
+  fillSelect($('#set-model'), models)
+  fillSelect($('#transcribe-model'), models)
+  fillSelect($('#set-language'), languages)
+  fillSelect($('#transcribe-language'), languages)
+}
+
+function applySettings(settings) {
+  appSettings = settings
+  if (settings.ui_language !== language()) {
+    setLanguage(settings.ui_language)
+    rerender()
+  }
 }
 
 async function loadSettings() {
   try {
-    appSettings = await (await api('/api/settings')).json()
+    applySettings(await (await api('/api/settings')).json())
   } catch {}
   renderSettings()
 }
@@ -822,24 +900,24 @@ async function saveSettings(changes) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(changes),
     })
-    appSettings = await res.json()
+    applySettings(await res.json())
   } catch (err) {
-    setStatus(`Ustawienia: ${err.message}`, true)
+    setStatus(t('settings.error', { message: err.message }), true)
   }
   renderSettings()
 }
 
 function renderSettings() {
+  $('#set-ui-language').value = language()
   $('#set-model').value = appSettings.model
   $('#set-language').value = appSettings.language
   $('#set-follow').checked = appSettings.follow
-  const description = MODEL_OPTIONS.find(([value]) => value === appSettings.model)?.[2] || ''
-  let availability = ''
+  let hint = t(`models.desc.${appSettings.model}`)
   if (storageInfo) {
     const downloaded = storageInfo.models.some((m) => m.name === appSettings.model)
-    availability = downloaded ? ' Pobrany.' : ' Pobierze się przy pierwszej transkrypcji.'
+    hint += ` ${t(downloaded ? 'models.downloaded' : 'models.not_downloaded')}`
   }
-  $('#model-hint').textContent = description + availability
+  $('#model-hint').textContent = hint
 }
 
 async function refreshStorage() {
@@ -849,13 +927,36 @@ async function refreshStorage() {
     $('#data-info').textContent = err.message
     return
   }
+  renderStorage()
+  renderSettings()
+}
+
+function renderStorage() {
   const s = storageInfo
-  $('#data-info').textContent = `${s.files} ${plural(s.files, 'plik', 'pliki', 'plików')}, ${formatBytes(s.data_bytes)}`
+  if (!s) return
+  $('#data-info').textContent = t('data.summary', { files: t('data.files', { n: s.files }), size: formatBytes(s.data_bytes) })
   $('#data-path').textContent = s.data_dir
   $('#models-info').textContent = s.models.length
-    ? `${s.models.map((m) => `${m.name}: ${formatBytes(m.bytes)}`).join(', ')}. Razem ${formatBytes(s.models_bytes)}.`
-    : 'Żaden model nie jest jeszcze pobrany.'
+    ? t('data.models_total', { list: s.models.map((m) => `${m.name}: ${formatBytes(m.bytes)}`).join(', '), size: formatBytes(s.models_bytes) })
+    : t('data.no_models')
   $('#models-path').textContent = s.models_dir
+}
+
+// Zmiana języka bez ponownego uruchomienia: teksty z index.html, listy wyboru i wszystko,
+// co skrypt wypisał sam. Komunikaty błędów zostają w języku, w którym się pojawiły.
+function rerender() {
+  applyStatic()
+  fillOptions()
+  updatePlayButton()
+  $('#status').textContent = statusText()
+  refreshLibrary()
+  if (state.file) showFile(state.file)
+  if (state.job) showTranscriptStatus(state.job)
+  for (const word of state.words) if (word.p < 0.5) word.el.title = confidenceTitle(word.p)
+  renderHits()
+  renderFragments()
+  if (lastUpdate) renderUpdate(lastUpdate)
+  renderStorage()
   renderSettings()
 }
 
@@ -868,7 +969,7 @@ function showSection(name) {
   }
 }
 
-function openSettings(section = 'transkrypcja') {
+function openSettings(section = 'general') {
   renderSettings()
   showSection(section)
   if (!$('#settings').open) $('#settings').showModal()
@@ -876,17 +977,13 @@ function openSettings(section = 'transkrypcja') {
   refreshStorage()
 }
 
-fillSelect($('#set-model'), MODEL_OPTIONS)
-fillSelect($('#rt-model'), MODEL_OPTIONS)
-fillSelect($('#set-language'), LANGUAGE_OPTIONS)
-fillSelect($('#rt-language'), LANGUAGE_OPTIONS)
-
 $('#settings-open').addEventListener('click', () => openSettings())
 $('#settings-close').addEventListener('click', () => $('#settings').close())
-$('#update-pill').addEventListener('click', () => openSettings('aktualizacje'))
+$('#update-pill').addEventListener('click', () => openSettings('updates'))
 for (const button of document.querySelectorAll('.settings-nav [data-section]')) {
   button.addEventListener('click', () => showSection(button.dataset.section))
 }
+$('#set-ui-language').addEventListener('change', (event) => saveSettings({ ui_language: event.target.value }))
 $('#set-model').addEventListener('change', (event) => saveSettings({ model: event.target.value }))
 $('#set-language').addEventListener('change', (event) => saveSettings({ language: event.target.value }))
 $('#set-follow').addEventListener('change', (event) => saveSettings({ follow: event.target.checked }))
@@ -906,6 +1003,14 @@ for (const button of document.querySelectorAll('[data-open]')) {
 
 // ---------- start ----------
 
+// Język interfejsu serwer wpisuje do <html lang>, więc teksty są właściwe od pierwszej klatki;
+// do tej chwili klasa `booting` ukrywa stronę.
+setLanguage(document.documentElement.lang)
+applyStatic()
+fillOptions()
+fillSelect($('#set-ui-language'), UI_LANGUAGES)
+updatePlayButton(false)
+document.documentElement.classList.remove('booting')
 loadSettings()
 refreshUpdate()
 refreshLibrary()

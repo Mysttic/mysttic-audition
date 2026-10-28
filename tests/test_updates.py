@@ -184,7 +184,7 @@ class UpdaterTests(unittest.TestCase):
             updater.download()
         state = updater.snapshot()
         self.assertEqual(state["status"], "failed")
-        self.assertIn("SHA-256", state["error"])
+        self.assertEqual(state["error"], {"code": "update_checksum_mismatch"})
         self.assertFalse((self.tmp / "update").exists())
 
     def test_network_failure_is_quiet(self):

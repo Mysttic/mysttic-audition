@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 import updates  # noqa: E402
 
 FILES = ["app.py", "updates.py", "mysttic-audition.pyw", "instaluj.bat", "requirements.txt",
-         "VERSION.md", "CHANGELOG.md", "README.md"]
+         "VERSION.md", "CHANGELOG.md", "README.md", "README.pl.md"]
 DIRS = ["static"]
 
 
