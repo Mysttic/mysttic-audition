@@ -1,0 +1,202 @@
+name: Wydanie
+
+# Wydanie powstaje, gdy na gałąź główną trafi zmiana VERSION.md (scalenie PR albo push).
+# Sama poprawka kodu czy dokumentacji nie uruchamia niczego.
+#
+# Druga bramka jest w jobie `wersja`: jeśli tag o tej wersji już istnieje, bieg kończy się
+# bez robienia czegokolwiek. Chroni to przed powtórnym wydaniem, gdy zmieni się sam opis
+# w VERSION.md. Gdy po udanym wydaniu nie powiedzie się tylko kopia na stronę (na przykład
+# bez sekretu HUB_TOKEN), wystarczy w Actions ponowić nieudane joby tego samego biegu.
+#
+# Job `witryna` kopiuje pliki do huba Mysttic/Mysttic, skąd pobierają je ludzie
+# (https://mysttic.github.io/Mysttic/mysttic-audition/) i aktualizacja w aplikacji.
+# Kontrakt huba opisuje RELEASES.md w repozytorium Mysttic/Mysttic.
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - VERSION.md
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wydanie
+  cancel-in-progress: false
+
+jobs:
+  wersja:
+    name: Numer wersji
+    runs-on: ubuntu-latest
+    outputs:
+      wersja: ${{ steps.odczyt.outputs.wersja }}
+      tag: ${{ steps.odczyt.outputs.tag }}
+      wydajemy: ${{ steps.odczyt.outputs.wydajemy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: odczyt
+        name: Wersja z VERSION.md
+        run: |
+          set -euo pipefail
+          # Pierwsza linia, która jest samym numerem; reszta pliku to opis.
+          wersja=$(grep -m1 -E '^[0-9]+\.[0-9]+\.[0-9]+$' VERSION.md || true)
+          if [ -z "$wersja" ]; then
+            echo "::error file=VERSION.md::Nie znalazłem numeru wersji (oczekiwany format: 1.2.3)"
+            exit 1
+          fi
+          if ! grep -qE "^## \[${wersja//./\\.}\]" CHANGELOG.md; then
+            echo "::error file=CHANGELOG.md::Brak sekcji ## [$wersja] w CHANGELOG.md"
+            exit 1
+          fi
+          tag="v$wersja"
+          echo "wersja=$wersja" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "Tag $tag już istnieje, nie wydajemy drugi raz." >> "$GITHUB_STEP_SUMMARY"
+            echo "wydajemy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Wydanie $tag" >> "$GITHUB_STEP_SUMMARY"
+            echo "wydajemy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  wydanie:
+    name: Paczka i wydanie
+    needs: wersja
+    if: needs.wersja.outputs.wydajemy == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.wersja.outputs.tag }}
+      WERSJA: ${{ needs.wersja.outputs.wersja }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # Testy aktualizacji i paczka korzystają tylko z biblioteki standardowej.
+      - name: Testy
+        run: python -m unittest discover -s tests -v
+
+      - name: Paczka
+        run: |
+          set -euo pipefail
+          python tools/pakiet.py dist
+          cat dist/*-checksums.txt
+
+      # Opis to sekcja tej wersji z CHANGELOG.md, ta sama, którą aplikacja pokazuje
+      # w oknie aktualizacji.
+      - name: Opis wydania
+        run: |
+          set -euo pipefail
+          python - "$WERSJA" > opis.md <<'PY'
+          import sys
+          import updates
+          tekst = open("CHANGELOG.md", encoding="utf-8").read()
+          print(f"Mysttic Audition {sys.argv[1]}\n")
+          print(updates.changelog_section(tekst, sys.argv[1]))
+          PY
+          cat opis.md
+
+      - name: Wydanie
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" dist/* \
+            --title "Mysttic Audition $WERSJA" \
+            --notes-file opis.md \
+            --target "$GITHUB_SHA"
+
+  # Kopia do huba Mysttic/Mysttic: stamtąd pobierają ludzie i stamtąd czyta aktualizacja
+  # w aplikacji, bo repozytorium z kodem jest prywatne. Tag ma przedrostek projektu, bo
+  # w hubie leżą wydania wszystkich projektów, a nazwy plików zostają bez zmian.
+  witryna:
+    name: Kopia na stronę
+    needs: [wersja, wydanie]
+    if: needs.wersja.outputs.wydajemy == 'true'
+    runs-on: ubuntu-latest
+    env:
+      HUB: Mysttic/Mysttic
+      PROJEKT: mysttic-audition
+      PRZEDROSTEK: mysttic-audition-v
+      NAZWA: Mysttic Audition
+      STRONA: https://mysttic.github.io/Mysttic/mysttic-audition/
+      WERSJA: ${{ needs.wersja.outputs.wersja }}
+      TAG: ${{ needs.wersja.outputs.tag }}
+      TAG_HUB: mysttic-audition-v${{ needs.wersja.outputs.wersja }}
+    steps:
+      # Domyślny GITHUB_TOKEN sięga tylko do tego repozytorium, więc kopia potrzebuje
+      # własnego poświadczenia (README, sekcja „Wydanie nowej wersji”).
+      - name: Poświadczenie do repozytorium z witryną
+        env:
+          HUB_TOKEN: ${{ secrets.HUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [ -z "${HUB_TOKEN:-}" ]; then
+            echo "::error::Brak sekretu HUB_TOKEN. Wydanie $TAG powstało, kopia na stronę nie."
+            echo "::error::Potrzebny token osobisty z uprawnieniem Contents: read and write do $HUB."
+            exit 1
+          fi
+
+      - name: Pliki z wydania
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p kopia
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --dir kopia --pattern "$PROJEKT-*"
+          ls -la kopia
+          # Paczka i plik sum. Inna liczba znaczy, że wydanie wyszło niekompletne.
+          if [ "$(ls -1 kopia | wc -l)" -ne 2 ]; then
+            echo "::error::Spodziewałem się dwóch plików w wydaniu $TAG."
+            exit 1
+          fi
+          (cd kopia && sha256sum -c "$PROJEKT-$WERSJA-checksums.txt")
+
+      # Opis zostaje przy numerze i adresie strony: odnośniki do prywatnego repozytorium
+      # byłyby dla czytelnika ślepe.
+      - name: Opis wydania
+        run: |
+          set -euo pipefail
+          {
+            echo "$NAZWA $WERSJA"
+            echo
+            echo "$STRONA"
+          } > opis.md
+          cat opis.md
+
+      - name: Wydanie na stronie
+        env:
+          GH_TOKEN: ${{ secrets.HUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Powtórzony bieg ma zastąpić poprzednią kopię o tym samym numerze.
+          if gh release view "$TAG_HUB" --repo "$HUB" >/dev/null 2>&1; then
+            gh release delete "$TAG_HUB" --repo "$HUB" --cleanup-tag --yes
+          fi
+          gh release create "$TAG_HUB" kopia/* \
+            --repo "$HUB" \
+            --title "$NAZWA $WERSJA" \
+            --notes-file opis.md \
+            --target master
+
+      # Na stronie stoi jedna wersja, najnowsza; pełna historia zostaje w tym repozytorium.
+      # Cyfra po przedrostku chroni wydania projektów, których przedrostek zaczyna się tak samo.
+      - name: Strona trzyma jedną wersję
+        env:
+          GH_TOKEN: ${{ secrets.HUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release list --repo "$HUB" --limit 100 --json tagName -q '.[].tagName' \
+            | { grep -E "^${PRZEDROSTEK}[0-9]" || true; } \
+            | { grep -vxF "$TAG_HUB" || true; } \
+            | while read -r stary; do
+                echo "Kasuję $stary"
+                gh release delete "$stary" --repo "$HUB" --cleanup-tag --yes
+              done
+          echo "Na stronie zostaje $TAG_HUB" >> "$GITHUB_STEP_SUMMARY"

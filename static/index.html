@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mysttic Audition</title>
+  <link rel="icon" href="/static/icon.png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <button id="about-open" class="brand" type="button" title="O aplikacji i aktualizacje">
+      <img src="/static/icon.png" alt="" width="22" height="22">
+      <strong>Mysttic Audition</strong>
+      <span id="app-version" class="muted"></span>
+    </button>
+    <label class="btn primary">Otwórz plik…
+      <input id="file-input" type="file" hidden
+        accept="audio/*,video/*,.mkv,.mka,.avi,.wmv,.wma,.flv,.mts,.m2ts,.ts,.3gp,.amr,.opus,.aiff,.aif">
+    </label>
+    <select id="library" title="Wcześniej otwarte pliki"></select>
+    <label title="Model użyty dla nowych plików i przy ponownej transkrypcji">Model
+      <select id="model">
+        <option value="large-v3-turbo">large-v3-turbo (zalecany)</option>
+        <option value="small">small (szybki, słabszy)</option>
+        <option value="medium">medium</option>
+        <option value="large-v3">large-v3 (najdokładniejszy, wolny)</option>
+      </select>
+    </label>
+    <label>Język
+      <select id="language">
+        <option value="pl">polski</option>
+        <option value="auto">wykryj</option>
+        <option value="en">angielski</option>
+        <option value="de">niemiecki</option>
+        <option value="uk">ukraiński</option>
+        <option value="ru">rosyjski</option>
+        <option value="cs">czeski</option>
+        <option value="sk">słowacki</option>
+        <option value="fr">francuski</option>
+        <option value="es">hiszpański</option>
+        <option value="it">włoski</option>
+      </select>
+    </label>
+    <span id="status" class="status"></span>
+    <button id="update-pill" class="pill" type="button" hidden></button>
+  </header>
+
+  <div id="drop-overlay">Upuść plik audio lub wideo</div>
+
+  <section id="empty" class="empty">
+    <p>Otwórz albo przeciągnij tutaj plik audio lub wideo (MP3, WAV, M4A, FLAC, MP4, MKV, MOV, AVI…).</p>
+    <p class="muted">Dźwięk z wideo jest wyciągany automatycznie. Wszystko działa lokalnie, nic nie wychodzi z komputera.</p>
+  </section>
+
+  <main id="workspace" hidden>
+    <section class="player">
+      <div class="file-bar">
+        <strong id="file-name"></strong>
+        <span id="file-info" class="muted"></span>
+        <button id="delete" class="ghost" title="Usuwa dane aplikacji; oryginalny plik na dysku zostaje">Usuń z biblioteki</button>
+      </div>
+      <div id="waveform"></div>
+      <div class="controls">
+        <button id="play" class="primary" title="Spacja">▶ Odtwórz</button>
+        <span id="time" class="mono"></span>
+        <label>Powiększenie <input id="zoom" type="range" min="0" max="100" value="0"></label>
+        <label title="Klawisz L"><input id="loop" type="checkbox"> Zapętl fragment</label>
+        <label><input id="follow" type="checkbox" checked> Przewijaj tekst</label>
+        <span class="muted hint">Przeciągnij po fali, aby zaznaczyć fragment. Klawisze 1 do 9 odtwarzają fragmenty, strzałki przewijają o 2 s.</span>
+      </div>
+    </section>
+
+    <section class="transcript-panel">
+      <div class="panel-head">
+        <h2>Transkrypcja</h2>
+        <span id="tr-status" class="muted"></span>
+        <button id="retranscribe" class="ghost" disabled title="Użyje modelu i języka wybranych u góry">Transkrybuj ponownie</button>
+      </div>
+      <div id="transcript"></div>
+    </section>
+
+    <aside class="side">
+      <div class="search">
+        <input id="search" type="search" placeholder="Szukaj słowa lub frazy…" autocomplete="off">
+        <label title="Bez tej opcji „umowa” znajdzie też „umowy”, „umowie”, a wielkość liter i ogonki nie mają znaczenia">
+          <input id="exact" type="checkbox"> dokładnie
+        </label>
+      </div>
+      <div id="hits-info" class="muted"></div>
+      <ol id="hits"></ol>
+      <h2>Fragmenty</h2>
+      <ol id="fragments"></ol>
+      <p id="fragments-empty" class="muted">Zaznacz fragment na fali albo dodaj wynik wyszukiwania przyciskiem +.
+        Dwa fragmenty z włączoną pętlą i klawisze 1, 2 dają szybkie porównanie A/B.</p>
+    </aside>
+  </main>
+
+  <dialog id="about">
+    <div class="about-head">
+      <img src="/static/icon.png" alt="" width="48" height="48">
+      <div>
+        <strong>Mysttic Audition</strong>
+        <div id="about-version" class="muted"></div>
+      </div>
+    </div>
+    <h2>Aktualizacje</h2>
+    <p id="update-status"></p>
+    <progress id="update-progress" max="1" hidden></progress>
+    <div id="update-notes" hidden></div>
+    <div class="about-actions">
+      <button id="update-check" type="button">Sprawdź teraz</button>
+      <button id="update-download" class="primary" type="button" hidden>Pobierz aktualizację</button>
+      <button id="update-restart" class="primary" type="button" hidden>Uruchom ponownie i zainstaluj</button>
+    </div>
+    <label class="about-auto"><input id="update-auto" type="checkbox">
+      Sprawdzaj i pobieraj aktualizacje automatycznie (raz na dobę)</label>
+    <p class="muted small">Aplikacja pyta tylko publiczne API GitHuba o listę wydań, bez danych o Tobie
+      i tym komputerze. Pobrana paczka jest sprawdzana sumą SHA-256 i instaluje się przy następnym
+      uruchomieniu. <a id="update-site" target="_blank" rel="noopener">Strona projektu</a></p>
+    <div class="about-close"><button id="about-close" type="button">Zamknij</button></div>
+  </dialog>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

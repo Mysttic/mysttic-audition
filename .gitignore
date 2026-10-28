@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+data/
+models/
+.webview/
+testmedia/
+dist/
+.claude/settings.local.json

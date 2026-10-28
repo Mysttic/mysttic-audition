@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>Test: Whisper w przeglądarce</title>
+  <style>
+    body { margin: 24px; background: #14161a; color: #e4e6ea; font: 14px/1.5 system-ui, "Segoe UI", sans-serif; }
+    h1 { font-size: 20px; }
+    h2 { font-size: 15px; margin-top: 24px; }
+    button { padding: 6px 14px; border: 0; border-radius: 6px; background: #5aa9ff; color: #0b1220; font: 600 14px system-ui, sans-serif; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: default; }
+    pre { max-height: 240px; overflow: auto; padding: 10px; border-radius: 6px; background: #101216; }
+    table { border-collapse: collapse; margin: 10px 0; }
+    th, td { padding: 4px 10px; border: 1px solid #2a2e36; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    .muted { color: #8b93a1; }
+    .bad { color: #ff7a7a; }
+  </style>
+</head>
+<body>
+  <h1>Test: Whisper w przeglądarce (WebGPU)</h1>
+  <p id="env" class="muted"></p>
+  <p><button id="run">Uruchom test</button> <span id="progress" class="muted"></span></p>
+  <h2>Wyniki</h2>
+  <table id="summary"></table>
+  <p class="muted">Wzorzec: początki słów zapisane przez syntezator mowy. Odchylenie to mediana różnicy
+    (ujemna: za wcześnie), błąd średni i percentyl liczone z wartości bezwzględnych.</p>
+  <details><summary>Tekst z przeglądarki</summary><p id="text"></p></details>
+  <details><summary>Słowo po słowie</summary><table id="words"></table></details>
+  <h2>Dziennik</h2>
+  <pre id="log"></pre>
+
+  <script type="module">
+    const params = new URLSearchParams(location.search)
+    const cfg = {
+      version: params.get('v') || '4.3.2',
+      model: params.get('model') || 'onnx-community/whisper-large-v3-turbo_timestamped',
+      encoder: params.get('enc') || 'fp16',
+      decoder: params.get('dec') || 'q4',
+      chunk: Number(params.get('chunk') || 30),
+      stride: Number(params.get('stride') || 5),
+    }
+    const $ = (selector) => document.querySelector(selector)
+    const started = performance.now()
+    const result = (window.__result = { cfg, status: 'idle' })
+
+    function log(message) {
+      $('#log').textContent += `[${((performance.now() - started) / 1000).toFixed(1)} s] ${message}\n`
+    }
+
+    function norm(text) {
+      return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l')
+        .replace(/[^\p{L}\p{N}]+/gu, '')
+    }
+
+    // Najdłuższy wspólny podciąg słów: paruje słowa wzorca z rozpoznanymi mimo pominięć i liczb zapisanych cyframi.
+    function align(reference, hypothesis) {
+      const n = reference.length
+      const m = hypothesis.length
+      const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1))
+      for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+          dp[i][j] = reference[i].n === hypothesis[j].n ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
+        }
+      }
+      const pairs = new Map()
+      let i = 0
+      let j = 0
+      while (i < n && j < m) {
+        if (reference[i].n === hypothesis[j].n) pairs.set(i++, j++)
+        else if (dp[i + 1][j] >= dp[i][j + 1]) i++
+        else j++
+      }
+      return pairs
+    }
+
+    const median = (sorted) => sorted.length ? sorted[Math.floor((sorted.length - 1) / 2)] : NaN
+
+    function evaluate(reference, words, duration) {
+      const hypothesis = words.map((w) => ({ ...w, n: norm(w.w) })).filter((w) => w.n)
+      const pairs = align(reference, hypothesis)
+      const diffs = [...pairs].map(([i, j]) => hypothesis[j].s - reference[i].s)
+      const abs = diffs.map(Math.abs).sort((a, b) => a - b)
+      let backwards = 0
+      for (let k = 1; k < words.length; k++) if (words[k].s < words[k - 1].s) backwards++
+      return {
+        pairs,
+        hypothesis,
+        matched: pairs.size,
+        bias: median([...diffs].sort((a, b) => a - b)),
+        mae: abs.reduce((sum, v) => sum + v, 0) / abs.length,
+        p90: abs[Math.floor(0.9 * (abs.length - 1))],
+        max: abs.at(-1),
+        within: abs.filter((v) => v <= 0.25).length / abs.length,
+        beyond: words.filter((w) => w.s > duration || w.e > duration + 0.5).length,
+        backwards,
+      }
+    }
+
+    async function describeGpu() {
+      if (!navigator.gpu) return 'brak WebGPU w tej przeglądarce'
+      const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' })
+      if (!adapter) return 'WebGPU bez dostępnej karty'
+      result.gpu = { vendor: adapter.info.vendor, architecture: adapter.info.architecture, f16: adapter.features.has('shader-f16') }
+      return `Karta: ${adapter.info.vendor} ${adapter.info.architecture}, shader-f16: ${result.gpu.f16 ? 'tak' : 'nie'}`
+    }
+
+    async function loadAudio() {
+      const context = new OfflineAudioContext(1, 1, 16000)
+      const buffer = await context.decodeAudioData(await (await fetch('mowa.wav')).arrayBuffer())
+      return buffer.getChannelData(0)
+    }
+
+    const fmt = (v, digits = 2) => Number.isFinite(v) ? v.toFixed(digits).replace('.', ',') : 'brak'
+
+    function renderSummary(rows) {
+      const head = ['Silnik', 'Ładowanie modelu', 'Transkrypcja', '× długość', 'Słowa zgodne', 'Odchylenie',
+        'Błąd średni', '90. percentyl', 'Maks.', 'Do 0,25 s', 'Poza nagraniem', 'Cofnięcia czasu']
+      $('#summary').innerHTML = `<tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr>` + rows.map((r) => `<tr>
+        <td>${r.name}</td><td>${r.load}</td><td>${r.time}</td><td>${r.ratio}</td>
+        <td>${r.m.matched} z ${r.total}</td><td>${fmt(r.m.bias)} s</td><td>${fmt(r.m.mae)} s</td>
+        <td>${fmt(r.m.p90)} s</td><td>${fmt(r.m.max)} s</td><td>${Math.round(r.m.within * 100)}%</td>
+        <td class="${r.m.beyond ? 'bad' : ''}">${r.m.beyond}</td><td class="${r.m.backwards ? 'bad' : ''}">${r.m.backwards}</td></tr>`).join('')
+    }
+
+    function renderWords(reference, fw, web) {
+      const cell = (m, i) => {
+        if (!m.pairs.has(i)) return '<td>brak</td><td></td>'
+        const w = m.hypothesis[m.pairs.get(i)]
+        const d = w.s - reference[i].s
+        return `<td>${fmt(w.s)}</td><td class="${Math.abs(d) > 0.25 ? 'bad' : ''}">${d >= 0 ? '+' : ''}${fmt(d)}</td>`
+      }
+      $('#words').innerHTML = '<tr><th>Słowo</th><th>Wzorzec</th><th>faster-whisper</th><th>Δ</th><th>Przeglądarka</th><th>Δ</th></tr>' +
+        reference.map((r, i) => `<tr><td>${r.w}</td><td>${fmt(r.s)}</td>${cell(fw, i)}${cell(web, i)}</tr>`).join('')
+    }
+
+    async function run() {
+      $('#run').disabled = true
+      result.status = 'running'
+      try {
+        const [rawReference, fw, audio] = await Promise.all([
+          fetch('mowa_gt.json').then((r) => r.json()),
+          fetch('fw.json').then((r) => r.json()),
+          loadAudio(),
+        ])
+        const reference = rawReference.map((w) => ({ ...w, n: norm(w.w) }))
+        const duration = audio.length / 16000
+        log(`Nagranie ${duration.toFixed(2)} s, wzorzec: ${reference.length} słów`)
+        log(`Transformers.js ${cfg.version}, model ${cfg.model}, enkoder ${cfg.encoder}, dekoder ${cfg.decoder}`)
+        const { pipeline, env } = await import(`https://cdn.jsdelivr.net/npm/@huggingface/transformers@${cfg.version}`)
+        env.allowLocalModels = false
+        const files = {}
+        const loadStart = performance.now()
+        const transcriber = await pipeline('automatic-speech-recognition', cfg.model, {
+          device: 'webgpu',
+          dtype: { encoder_model: cfg.encoder, decoder_model_merged: cfg.decoder },
+          progress_callback: (p) => {
+            if (p.status !== 'progress' || !p.total) return
+            files[p.file] = p
+            const loaded = Object.values(files).reduce((sum, f) => sum + f.loaded, 0)
+            const total = Object.values(files).reduce((sum, f) => sum + f.total, 0)
+            $('#progress').textContent = `Pobieranie modelu: ${Math.round(loaded / 1e6)} z ${Math.round(total / 1e6)} MB`
+          },
+        })
+        result.load_s = (performance.now() - loadStart) / 1000
+        log(`Model gotowy po ${result.load_s.toFixed(1)} s`)
+
+        const options = {
+          language: 'polish', task: 'transcribe', return_timestamps: 'word',
+          chunk_length_s: cfg.chunk, stride_length_s: cfg.stride,
+        }
+        result.runs = []
+        let output
+        for (let i = 1; i <= 2; i++) {
+          $('#progress').textContent = `Transkrypcja ${i} z 2 (pierwsza kompiluje shadery)…`
+          const t = performance.now()
+          output = await transcriber(audio, options)
+          result.runs.push((performance.now() - t) / 1000)
+          log(`Transkrypcja ${i}: ${result.runs.at(-1).toFixed(1)} s`)
+        }
+        $('#progress').textContent = ''
+
+        const words = output.chunks.map((c) => ({ w: c.text, s: c.timestamp[0], e: c.timestamp[1] ?? c.timestamp[0] }))
+        const fwMetrics = evaluate(reference, fw.words, duration)
+        const webMetrics = evaluate(reference, words, duration)
+        const warm = result.runs.at(-1)
+        renderSummary([
+          {
+            name: fw.engine, load: `${fmt(fw.load_s, 1)} s`, time: `${fmt(fw.transcribe_s, 1)} s`,
+            ratio: fmt(fw.transcribe_s / duration), m: fwMetrics, total: reference.length,
+          },
+          {
+            name: `Transformers.js ${cfg.version}, WebGPU (${cfg.encoder}/${cfg.decoder})`,
+            load: `${fmt(result.load_s, 1)} s`,
+            time: `${fmt(warm, 1)} s (pierwsza: ${fmt(result.runs[0], 1)} s)`,
+            ratio: fmt(warm / duration), m: webMetrics, total: reference.length,
+          },
+        ])
+        renderWords(reference, fwMetrics, webMetrics)
+        $('#text').textContent = output.text
+        const strip = ({ pairs, hypothesis, ...rest }) => rest
+        Object.assign(result, { status: 'done', duration, text: output.text, words, fw: strip(fwMetrics), web: strip(webMetrics) })
+        log('Gotowe')
+      } catch (err) {
+        result.status = 'error'
+        result.error = String(err?.stack || err)
+        log(`BŁĄD: ${err?.message || err}`)
+        $('#progress').textContent = ''
+      } finally {
+        $('#run').disabled = false
+      }
+    }
+
+    $('#env').textContent = `${await describeGpu()} · ${navigator.userAgent.match(/Chrome\/[\d.]+/)?.[0] ?? navigator.userAgent}`
+    $('#run').addEventListener('click', run)
+    if (params.has('auto')) run()
+  </script>
+</body>
+</html>

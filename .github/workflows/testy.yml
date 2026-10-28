@@ -1,0 +1,25 @@
+name: Testy
+
+# Testy aktualizacji i paczki wydania. Korzystają tylko z biblioteki standardowej,
+# więc nie trzeba instalować zależności aplikacji.
+on:
+  pull_request:
+  push:
+    branches: [main, master, develop]
+
+jobs:
+  testy:
+    name: Testy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Testy jednostkowe
+        run: python -m unittest discover -s tests -v
+
+      - name: Paczka się buduje
+        run: python tools/pakiet.py dist && ls -la dist
