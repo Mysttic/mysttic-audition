@@ -14,6 +14,7 @@ import re
 import secrets
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -49,6 +50,13 @@ PEAKS_PER_SEC = 200    # rozdzielczość przebiegu fali
 CPU_THREADS = max(1, (os.cpu_count() or 8) // 2)
 MODELS = ("large-v3-turbo", "small", "medium", "large-v3")
 LANGUAGES = ("pl", "auto", "en", "de", "uk", "ru", "cs", "sk", "fr", "es", "it")
+# katalogi pamięci podręcznej Hugging Face w models/, z których faster-whisper wczytuje modele
+MODEL_REPOS = {
+    "large-v3-turbo": "mobiuslabsgmbh--faster-whisper-large-v3-turbo",
+    "small": "Systran--faster-whisper-small",
+    "medium": "Systran--faster-whisper-medium",
+    "large-v3": "Systran--faster-whisper-large-v3",
+}
 ID_RE = re.compile(r"[0-9a-f]{8}")
 LOSSLESS = {"flac", "alac", "wavpack", "tta", "ape", "truehd", "mlp", "shorten"}
 COVER_CODECS = {"mjpeg", "png", "bmp", "gif"}  # okładki w MP3/M4A to nie wideo
@@ -460,6 +468,96 @@ def updater() -> updates.Updater:
 @app.get("/api/version")
 def get_version() -> dict:
     return {"name": APP_NAME, "version": VERSION}
+
+
+# ---------- ustawienia i dane ----------
+
+SETTINGS_FILE = DATA / "ustawienia.json"  # w folderze danych, a nie w profilu WebView2, więc nie zależy od portu
+DEFAULT_SETTINGS = {"model": MODELS[0], "language": "pl", "follow": True}
+_settings_lock = threading.Lock()
+
+
+def load_settings() -> dict:
+    settings = dict(DEFAULT_SETTINGS)
+    try:
+        stored = json.loads(SETTINGS_FILE.read_text("utf-8"))
+        settings.update({key: value for key, value in stored.items() if key in DEFAULT_SETTINGS})
+    except (OSError, ValueError, AttributeError):
+        pass
+    return settings
+
+
+class SettingsUpdate(BaseModel):
+    model: str | None = None
+    language: str | None = None
+    follow: bool | None = None
+
+
+@app.get("/api/settings")
+def get_settings() -> dict:
+    return load_settings()
+
+
+@app.post("/api/settings")
+def save_settings(req: SettingsUpdate) -> dict:
+    with _settings_lock:
+        settings = load_settings()
+        settings.update(req.model_dump(exclude_none=True))
+        check_options(settings["model"], settings["language"])
+        DATA.mkdir(exist_ok=True)
+        SETTINGS_FILE.write_text(json.dumps(settings), "utf-8")
+    return settings
+
+
+def disk_usage(path: Path) -> int:
+    """Bajty plików w katalogu. Dowiązania symboliczne pomijamy, bo liczą się tam, dokąd prowadzą."""
+    total = 0
+    for folder, _, names in os.walk(path):
+        for name in names:
+            try:
+                info = os.lstat(os.path.join(folder, name))
+            except OSError:
+                continue
+            if not stat.S_ISLNK(info.st_mode):
+                total += info.st_size
+    return total
+
+
+def model_bytes(name: str) -> int:
+    """Rozmiar modelu: pliki migawki prowadzą dowiązaniami do wspólnego katalogu blobs/."""
+    total = 0
+    for path in (MODELS_DIR / f"models--{MODEL_REPOS[name]}" / "snapshots").glob("*/*"):
+        try:
+            total += path.stat().st_size if path.is_file() else 0
+        except OSError:
+            pass
+    return total
+
+
+@app.get("/api/storage")
+def get_storage() -> dict:
+    models = [{"name": name, "bytes": model_bytes(name)} for name in MODELS
+              if (MODELS_DIR / f"models--{MODEL_REPOS[name]}").is_dir()]
+    return {
+        "data_dir": str(DATA), "data_bytes": disk_usage(DATA) if DATA.exists() else 0,
+        "files": sum(1 for _ in DATA.glob("*/meta.json")),
+        "models_dir": str(MODELS_DIR), "models_bytes": disk_usage(MODELS_DIR) if MODELS_DIR.exists() else 0,
+        "models": models,
+    }
+
+
+class FolderRequest(BaseModel):
+    folder: str
+
+
+@app.post("/api/open-folder")
+def open_folder(req: FolderRequest) -> dict:
+    path = {"data": DATA, "models": MODELS_DIR}.get(req.folder)
+    if path is None:
+        raise HTTPException(400, "Nieznany folder.")
+    path.mkdir(exist_ok=True)
+    os.startfile(path)  # otwiera Eksplorator Windows
+    return {"opened": str(path)}
 
 
 @app.get("/api/update")

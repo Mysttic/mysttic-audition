@@ -65,7 +65,8 @@ Kroki:
 | Fragment | przeciągnięcie po fali albo „+” przy wyniku |
 | Porównanie A/B | klawisze 1 do 9 odtwarzają fragmenty, L włącza pętlę |
 | Eksport | „WAV” albo „Oryginał” przy fragmencie, potem okno „Zapisz jako” |
-| O aplikacji i aktualizacje | ikona z numerem wersji w lewym górnym rogu |
+| Ustawienia: model, język, aktualizacje, dane | przycisk „Ustawienia” w prawym górnym rogu albo Ctrl+, |
+| Ponowna transkrypcja innym modelem | „Transkrybuj ponownie” nad tekstem |
 
 Eksport:
 
@@ -93,7 +94,7 @@ Whisper zapisuje liczby cyframi („10%” zamiast „dziesięć procent”), wi
 
 ## Aktualizacje
 
-- Raz na dobę (opcja w oknie „O aplikacji”, domyślnie włączona) aplikacja pyta publiczne API
+- Raz na dobę (opcja w ustawieniach, sekcja Aktualizacje, domyślnie włączona) aplikacja pyta publiczne API
   GitHuba o wydania w [Mysttic/Mysttic](https://github.com/Mysttic/Mysttic/releases), z których
   korzysta też strona projektu. Bez tokenu i bez danych o użytkowniku czy komputerze.
 - Nowszą wersję pobiera wyłącznie spod `github.com/Mysttic/Mysttic/releases/download/`,
@@ -108,8 +109,9 @@ Whisper zapisuje liczby cyframi („10%” zamiast „dziesięć procent”), wi
 - `data/<id>/`: kopia oryginalnej ścieżki dźwiękowej (bez obrazu), podgląd FLAC, przebieg fali
   i transkrypcja. Przesłana kopia pliku jest usuwana po wyciągnięciu dźwięku, oryginał zostaje
   tam, gdzie był. „Usuń z biblioteki” kasuje dane aplikacji dla danego pliku.
-- `data/app.log` to dziennik, `data/aktualizacje.json` ustawienia aktualizacji, a `.webview/`
-  ustawienia okna (wybrany model i język).
+- `data/ustawienia.json` to ustawienia (model, język, przewijanie tekstu), `data/aktualizacje.json`
+  ustawienia aktualizacji, a `data/app.log` dziennik. Sekcja Dane w ustawieniach pokazuje, ile
+  zajmują biblioteka i modele, i otwiera ich foldery.
 - Z internetem aplikacja łączy się tylko po zależności, modele i informację o wydaniach.
 
 ## Dla deweloperów

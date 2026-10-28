@@ -8,6 +8,28 @@ Numer wydania jest w [VERSION.md](VERSION.md): jego zmiana na gałęzi `main` ur
 wydanie. Treść sekcji danej wersji trafia do opisu wydania i do okna aktualizacji
 w aplikacji.
 
+## [0.3.0] - 2026-10-28
+
+Okno ustawień zamiast przełączników rozrzuconych po głównym oknie. Główne okno zostaje przy
+pracy z nagraniem: otwieranie, biblioteka, odtwarzanie, szukanie i fragmenty.
+
+### Dodane
+- **Okno ustawień** (przycisk „Ustawienia” w nagłówku albo Ctrl+,) z sekcjami Transkrypcja,
+  Odtwarzanie, Aktualizacje i Dane.
+- **Sekcja Dane:** zajętość biblioteki i pobranych modeli oraz przyciski otwierające ich foldery.
+- **Lista skrótów klawiszowych** w sekcji Odtwarzanie.
+- **Ponowna transkrypcja** pyta o model i język w osobnym okienku, tylko dla tego pliku.
+
+### Zmienione
+- Model i język przeniesione z nagłówka do ustawień. Ustawienia zapisują się w
+  `data/ustawienia.json`, więc nie zależą od profilu okna ani portu.
+- Sprawdzanie aktualizacji przeniesione do ustawień. Znacznik nowej wersji w nagłówku i kropka
+  przy sekcji Aktualizacje prowadzą prosto do niej.
+- „Przewijaj tekst” przeniesione spod przebiegu fali do ustawień.
+
+### Usunięte
+- Okno „O aplikacji”: numer wersji i aktualizacje są w ustawieniach.
+
 ## [0.2.0] - 2026-10-28
 
 Aplikacja desktopowa zamiast strony w przeglądarce. Startuje dwuklikiem w jednym pliku,
@@ -54,4 +76,5 @@ Pierwszy prototyp, działający w przeglądarce. Nie był publikowany.
 - Eksport fragmentu: WAV co do próbki albo oryginalny kodek bez ponownego kodowania.
 - Biblioteka wcześniej otwartych plików.
 
+[0.3.0]: https://github.com/Mysttic/mysttic-audition/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Mysttic/mysttic-audition/releases/tag/v0.2.0

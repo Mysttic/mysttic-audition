@@ -7,10 +7,21 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const FRAGMENT_COLOR = 'rgba(90, 169, 255, 0.22)'
 const HIT_COLOR = 'rgba(245, 197, 66, 0.32)'
-const LANG_NAMES = {
-  pl: 'polski', en: 'angielski', de: 'niemiecki', uk: 'ukraiński', ru: 'rosyjski',
-  cs: 'czeski', sk: 'słowacki', fr: 'francuski', es: 'hiszpański', it: 'włoski',
-}
+const MODEL_OPTIONS = [
+  ['large-v3-turbo', 'large-v3-turbo (zalecany)', 'Dobra jakość dla polskiego, transkrypcja trwa ok. 1/4 długości nagrania. Plik modelu: 1,6 GB.'],
+  ['small', 'small (szybki, słabszy)', 'Kilka razy szybszy od turbo, ale wyraźnie słabszy dla polskiego. Plik modelu: ok. 0,5 GB.'],
+  ['medium', 'medium', 'Pośredni między small a turbo. Plik modelu: ok. 1,5 GB.'],
+  ['large-v3', 'large-v3 (najdokładniejszy, wolny)', 'Najdokładniejszy, kilka razy wolniejszy od turbo. Plik modelu: ok. 3,1 GB.'],
+]
+const LANGUAGE_OPTIONS = [
+  ['pl', 'polski'], ['auto', 'wykryj automatycznie'], ['en', 'angielski'], ['de', 'niemiecki'],
+  ['uk', 'ukraiński'], ['ru', 'rosyjski'], ['cs', 'czeski'], ['sk', 'słowacki'],
+  ['fr', 'francuski'], ['es', 'hiszpański'], ['it', 'włoski'],
+]
+const LANG_NAMES = Object.fromEntries(LANGUAGE_OPTIONS)
+
+// Ustawienia trzyma serwer w data/ustawienia.json; tu ich kopia do bieżącej pracy.
+let appSettings = { model: 'large-v3-turbo', language: 'pl', follow: true }
 
 const state = {
   openId: null,     // plik, który właśnie się otwiera lub jest otwarty
@@ -119,7 +130,7 @@ async function refreshLibrary() {
 }
 
 function upload(file) {
-  const params = new URLSearchParams({ model: $('#model').value, language: $('#language').value })
+  const params = new URLSearchParams({ model: appSettings.model, language: appSettings.language })
   const xhr = new XMLHttpRequest()
   xhr.open('PUT', `/api/files?${params}`)
   xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name))
@@ -377,7 +388,7 @@ function highlightWord(time) {
   state.curWord = idx
   if (idx < 0) return
   words[idx].el.classList.add('cur')
-  if ($('#follow').checked && state.ws.isPlaying()) scrollWordIntoView(words[idx].el)
+  if (appSettings.follow && state.ws.isPlaying()) scrollWordIntoView(words[idx].el)
 }
 
 function scrollWordIntoView(el, force = false) {
@@ -572,13 +583,6 @@ $('#library').addEventListener('change', (event) => {
   if (event.target.value) openFile(event.target.value)
 })
 
-for (const id of ['model', 'language']) {
-  const select = $(`#${id}`)
-  const saved = localStorage.getItem(`audition.${id}`)
-  if (saved && [...select.options].some((o) => o.value === saved)) select.value = saved
-  select.addEventListener('change', () => localStorage.setItem(`audition.${id}`, select.value))
-}
-
 $('#play').addEventListener('click', () => state.ws?.playPause())
 
 $('#zoom').addEventListener('input', (event) => {
@@ -610,14 +614,24 @@ $('#search').addEventListener('keydown', (event) => {
 })
 $('#exact').addEventListener('change', () => runSearch(true))
 
-$('#retranscribe').addEventListener('click', async () => {
+// Ponowna transkrypcja pyta o model i język tylko dla tego pliku; domyślne są w ustawieniach.
+$('#retranscribe').addEventListener('click', () => {
+  if (!state.file) return
+  $('#retranscribe-file').textContent = state.file.name
+  $('#rt-model').value = state.file.transcript?.model || appSettings.model
+  $('#rt-language').value = appSettings.language
+  $('#retranscribe-dialog').showModal()
+})
+$('#rt-cancel').addEventListener('click', () => $('#retranscribe-dialog').close())
+$('#rt-start').addEventListener('click', async () => {
   const file = state.file
+  $('#retranscribe-dialog').close()
   if (!file) return
   try {
     await api(`/api/files/${file.id}/transcribe`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: $('#model').value, language: $('#language').value }),
+      body: JSON.stringify({ model: $('#rt-model').value, language: $('#rt-language').value }),
     })
     clearTimeout(state.pollTimer)
     state.token++
@@ -644,7 +658,12 @@ $('#delete').addEventListener('click', async () => {
 })
 
 document.addEventListener('keydown', (event) => {
-  if (!state.ws || $('#about').open || event.ctrlKey || event.metaKey || event.altKey) return
+  if (event.ctrlKey && event.key === ',') {
+    event.preventDefault()
+    if (!document.querySelector('dialog[open]')) openSettings()
+    return
+  }
+  if (!state.ws || document.querySelector('dialog[open]') || event.ctrlKey || event.metaKey || event.altKey) return
   if (event.target.matches('input[type=search], input[type=text], select, textarea')) return
   if (event.code === 'Space') {
     event.preventDefault()
@@ -689,7 +708,8 @@ function renderNotes(container, text) {
 function renderUpdate(u) {
   const r = u.release
   $('#app-version').textContent = `v${u.current}`
-  $('#about-version').textContent = `Wersja ${u.current}`
+  $('#settings-version').textContent = `Wersja ${u.current}`
+  $('#current-version').textContent = u.current
   $('#update-site').href = u.site
   const texts = {
     idle: u.auto ? 'Aplikacja sama sprawdzi, czy jest nowsza wersja.' : 'Automatyczne sprawdzanie jest wyłączone.',
@@ -721,6 +741,7 @@ function renderUpdate(u) {
   const pill = $('#update-pill')
   pill.hidden = !r || !['available', 'downloading', 'ready'].includes(u.status)
   if (r) pill.textContent = u.status === 'ready' ? `Wersja ${r.version} gotowa do instalacji` : `Dostępna wersja ${r.version}`
+  $('#update-dot').hidden = pill.hidden
   if (u.updated_from && !updatedShown) {
     updatedShown = true
     setStatus(`Zaktualizowano z wersji ${u.updated_from} do ${u.current}.`)
@@ -735,8 +756,8 @@ async function refreshUpdate() {
     renderUpdate(u)
     busy = u.status === 'checking' || u.status === 'downloading'
   } catch {}
-  // przy otwartym oknie albo trwającej pracy częściej, w tle raz na minutę (wynik sprawdzania automatycznego)
-  updateTimer = setTimeout(refreshUpdate, busy ? 700 : $('#about').open ? 5000 : 60_000)
+  // przy otwartych ustawieniach albo trwającej pracy częściej, w tle raz na minutę (wynik sprawdzania automatycznego)
+  updateTimer = setTimeout(refreshUpdate, busy ? 700 : $('#settings').open ? 5000 : 60_000)
 }
 
 async function updateAction(path, body) {
@@ -754,14 +775,6 @@ async function updateAction(path, body) {
   refreshUpdate()
 }
 
-function openAbout() {
-  $('#about').showModal()
-  refreshUpdate()
-}
-
-$('#about-open').addEventListener('click', openAbout)
-$('#update-pill').addEventListener('click', openAbout)
-$('#about-close').addEventListener('click', () => $('#about').close())
 $('#update-check').addEventListener('click', () => {
   $('#update-status').textContent = 'Sprawdzanie…'
   $('#update-status').classList.remove('error')
@@ -778,8 +791,122 @@ $('#update-restart').addEventListener('click', async () => {
   }
 })
 
+// ---------- ustawienia ----------
+
+let storageInfo = null
+
+function formatBytes(bytes) {
+  return bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1).replace('.', ',')} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`
+}
+
+function plural(n, one, few, many) {
+  if (n === 1) return one
+  return n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? few : many
+}
+
+function fillSelect(select, options) {
+  select.replaceChildren(...options.map(([value, label]) => new Option(label, value)))
+}
+
+async function loadSettings() {
+  try {
+    appSettings = await (await api('/api/settings')).json()
+  } catch {}
+  renderSettings()
+}
+
+async function saveSettings(changes) {
+  try {
+    const res = await api('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(changes),
+    })
+    appSettings = await res.json()
+  } catch (err) {
+    setStatus(`Ustawienia: ${err.message}`, true)
+  }
+  renderSettings()
+}
+
+function renderSettings() {
+  $('#set-model').value = appSettings.model
+  $('#set-language').value = appSettings.language
+  $('#set-follow').checked = appSettings.follow
+  const description = MODEL_OPTIONS.find(([value]) => value === appSettings.model)?.[2] || ''
+  let availability = ''
+  if (storageInfo) {
+    const downloaded = storageInfo.models.some((m) => m.name === appSettings.model)
+    availability = downloaded ? ' Pobrany.' : ' Pobierze się przy pierwszej transkrypcji.'
+  }
+  $('#model-hint').textContent = description + availability
+}
+
+async function refreshStorage() {
+  try {
+    storageInfo = await (await api('/api/storage')).json()
+  } catch (err) {
+    $('#data-info').textContent = err.message
+    return
+  }
+  const s = storageInfo
+  $('#data-info').textContent = `${s.files} ${plural(s.files, 'plik', 'pliki', 'plików')}, ${formatBytes(s.data_bytes)}`
+  $('#data-path').textContent = s.data_dir
+  $('#models-info').textContent = s.models.length
+    ? `${s.models.map((m) => `${m.name}: ${formatBytes(m.bytes)}`).join(', ')}. Razem ${formatBytes(s.models_bytes)}.`
+    : 'Żaden model nie jest jeszcze pobrany.'
+  $('#models-path').textContent = s.models_dir
+  renderSettings()
+}
+
+function showSection(name) {
+  for (const button of document.querySelectorAll('.settings-nav [data-section]')) {
+    button.classList.toggle('active', button.dataset.section === name)
+  }
+  for (const panel of document.querySelectorAll('.settings-body [data-panel]')) {
+    panel.hidden = panel.dataset.panel !== name
+  }
+}
+
+function openSettings(section = 'transkrypcja') {
+  renderSettings()
+  showSection(section)
+  if (!$('#settings').open) $('#settings').showModal()
+  refreshUpdate()
+  refreshStorage()
+}
+
+fillSelect($('#set-model'), MODEL_OPTIONS)
+fillSelect($('#rt-model'), MODEL_OPTIONS)
+fillSelect($('#set-language'), LANGUAGE_OPTIONS)
+fillSelect($('#rt-language'), LANGUAGE_OPTIONS)
+
+$('#settings-open').addEventListener('click', () => openSettings())
+$('#settings-close').addEventListener('click', () => $('#settings').close())
+$('#update-pill').addEventListener('click', () => openSettings('aktualizacje'))
+for (const button of document.querySelectorAll('.settings-nav [data-section]')) {
+  button.addEventListener('click', () => showSection(button.dataset.section))
+}
+$('#set-model').addEventListener('change', (event) => saveSettings({ model: event.target.value }))
+$('#set-language').addEventListener('change', (event) => saveSettings({ language: event.target.value }))
+$('#set-follow').addEventListener('change', (event) => saveSettings({ follow: event.target.checked }))
+for (const button of document.querySelectorAll('[data-open]')) {
+  button.addEventListener('click', async () => {
+    try {
+      await api('/api/open-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: button.dataset.open }),
+      })
+    } catch (err) {
+      setStatus(err.message, true)
+    }
+  })
+}
+
 // ---------- start ----------
 
+loadSettings()
 refreshUpdate()
 refreshLibrary()
 const initialId = location.hash.slice(1)
