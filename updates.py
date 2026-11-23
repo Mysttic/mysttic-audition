@@ -1,11 +1,11 @@
-"""Aktualizacje Mysttic Audition z publicznego huba wydań Mysttic/Mysttic.
+"""Aktualizacje Mysttic Audition z wydań tego repozytorium (GitHub Releases Mysttic/mysttic-audition).
 
-Kontrakt huba (RELEASES.md w repozytorium Mysttic/Mysttic) w skrócie:
-- w hubie leżą wydania wszystkich projektów, więc liczą się tylko tagi złożone z przedrostka
-  `mysttic-audition-v` i samego numeru X.Y.Z, a spośród nich najwyższy numer, nie pierwszy z listy;
+W skrócie:
+- liczą się tylko tagi złożone z `v` i samego numeru X.Y.Z (takie tworzy workflow wydanie.yml),
+  a spośród nich najwyższy numer, nie pierwszy z listy;
 - paczka i plik sum muszą mieć stan `uploaded`, inaczej wydanie jeszcze się wgrywa
   i po cichu nie ma aktualizacji;
-- pliki pobieramy tylko spod github.com/Mysttic/Mysttic/releases/download/<tag>/,
+- pliki pobieramy tylko spod github.com/Mysttic/mysttic-audition/releases/download/<tag>/,
   a przekierowania przyjmujemy tylko po HTTPS do hostów GitHuba;
 - pytamy najwyżej raz na dobę, bez tokenu i bez danych o komputerze; błąd kończy się
   wpisem w dzienniku, a aplikacja działa dalej.
@@ -32,11 +32,11 @@ from pathlib import Path, PurePosixPath
 
 PROJECT = "mysttic-audition"
 NAME = "Mysttic Audition"
-HUB = "Mysttic/Mysttic"
-TAG_PREFIX = f"{PROJECT}-v"
-RELEASES_API = f"https://api.github.com/repos/{HUB}/releases?per_page=100"
-DOWNLOAD_PREFIX = f"https://github.com/{HUB}/releases/download/"
-SITE = f"https://mysttic.github.io/Mysttic/{PROJECT}/"
+REPO = f"Mysttic/{PROJECT}"
+TAG_PREFIX = "v"
+RELEASES_API = f"https://api.github.com/repos/{REPO}/releases?per_page=100"
+DOWNLOAD_PREFIX = f"https://github.com/{REPO}/releases/download/"
+SITE = f"https://github.com/{REPO}/releases"
 DOWNLOAD_HOSTS = {"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"}
 TIMEOUT = 10  # sekundy; sprawdzanie aktualizacji to czynność poboczna, lepiej odpuścić niż wisieć
 MAX_PACKAGE_BYTES = 100 * 1024 * 1024  # paczka to kod i interfejs, kilka MB; większa to coś obcego
@@ -152,7 +152,7 @@ def fetch_releases(user_agent: str) -> object:
 def download(url: str, target: Path, user_agent: str, expected_size: int | None = None, progress=None) -> str:
     """Pobiera plik i zwraca jego SHA-256. Przerwane pobranie nie zostawia pliku docelowego."""
     if not url.startswith(DOWNLOAD_PREFIX):
-        raise UpdateError("update_bad_url", hub=HUB)
+        raise UpdateError("update_bad_url", repo=REPO)
     check_download_url(url)
     part = target.with_name(target.name + ".part")
     digest = hashlib.sha256()
@@ -266,7 +266,7 @@ class Updater:
         return self.snapshot()
 
     def check(self) -> dict:
-        """Pyta hub o wydania. Nie rzuca wyjątków: błąd trafia do stanu i dziennika."""
+        """Pyta GitHuba o wydania tego repozytorium. Nie rzuca wyjątków: błąd trafia do stanu i dziennika."""
         with self._lock:
             if self._busy or self.state["status"] in ("downloading", "ready"):
                 return self._snapshot_unlocked()

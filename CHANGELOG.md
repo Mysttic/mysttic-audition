@@ -8,6 +8,32 @@ The release number is in [VERSION.md](VERSION.md): changing it on the `main` bra
 release. The section for a version becomes the release description and the update notes shown
 in the app.
 
+## [0.5.0] - 2026-11-23
+
+Mysttic Audition is no longer actively developed. From this version the app looks for updates in
+the releases of this repository instead of the Mysttic release hub, and the README carries the
+description that was on the project page on the hub.
+
+### Changed
+- **Updates come from this repository.** The app asks GitHub for the releases of
+  `Mysttic/mysttic-audition` (tags `vX.Y.Z`) and downloads only from
+  `github.com/Mysttic/mysttic-audition/releases/download/`, with the same size and SHA-256
+  checks as before. The "Releases on GitHub" link in Settings, Updates section, leads to the
+  releases of this repository instead of the project page on the hub.
+- **Copies up to 0.4.0 have to install 0.5.0 by hand, once.** They look for updates on the
+  `Mysttic/Mysttic` hub, where the last release stays 0.4.0, so they never offer 0.5.0. Close
+  the app, download `mysttic-audition-<version>-windows.zip` from
+  https://github.com/Mysttic/mysttic-audition/releases/latest and copy the contents of its
+  `mysttic-audition` folder over the app's folder, replacing the files. `data/`, `models/` and
+  `.venv/` are not in the archive, so the library, the models and the settings stay. From 0.5.0
+  on, updates work from the app again.
+- The README describes what the app does, its requirements, privacy and updates, as the project
+  page on the hub did, and says that the project is no longer actively developed.
+
+### Removed
+- The `wydanie.yml` workflow no longer copies releases to the `Mysttic/Mysttic` hub and no
+  longer needs the `HUB_TOKEN` secret. Releases are published only in this repository.
+
 ## [0.4.0] - 2026-10-28
 
 The interface is in English by default, with Polish to choose in Settings, and the language of
@@ -107,6 +133,7 @@ The first prototype, running in the browser. It was not published.
 - Fragment export: WAV exact to the sample, or the original codec without re-encoding.
 - A library of previously opened files.
 
+[0.5.0]: https://github.com/Mysttic/mysttic-audition/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Mysttic/mysttic-audition/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Mysttic/mysttic-audition/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Mysttic/mysttic-audition/releases/tag/v0.2.0

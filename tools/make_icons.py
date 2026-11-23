@@ -2,7 +2,7 @@
 
     .venv/Scripts/python.exe tools/make_icons.py
 
-Tworzy brand/icon.svg (źródło do README i strony), static/icon.ico (okno i pasek
+Tworzy brand/icon.svg (źródło do README), static/icon.ico (okno i pasek
 zadań, rozmiary od 16 do 256 px) i static/icon.png (favicon). Potrzebuje Pillow
 z requirements-dev.txt.
 
