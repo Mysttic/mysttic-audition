@@ -5,12 +5,10 @@ name: Wydanie
 #
 # Druga bramka jest w jobie `wersja`: jeśli tag o tej wersji już istnieje, bieg kończy się
 # bez robienia czegokolwiek. Chroni to przed powtórnym wydaniem, gdy zmieni się sam opis
-# w VERSION.md. Gdy po udanym wydaniu nie powiedzie się tylko kopia na stronę (na przykład
-# bez sekretu HUB_TOKEN), wystarczy w Actions ponowić nieudane joby tego samego biegu.
+# w VERSION.md.
 #
-# Job `witryna` kopiuje pliki do huba Mysttic/Mysttic, skąd pobierają je ludzie
-# (https://mysttic.github.io/Mysttic/mysttic-audition/) i aktualizacja w aplikacji.
-# Kontrakt huba opisuje RELEASES.md w repozytorium Mysttic/Mysttic.
+# Wydanie powstaje tylko w tym repozytorium: z jego Releases pobierają je ludzie i stamtąd
+# czyta aktualizacja w aplikacji (updates.py).
 on:
   push:
     branches: [main, master]
@@ -110,93 +108,3 @@ jobs:
             --title "Mysttic Audition $WERSJA" \
             --notes-file opis.md \
             --target "$GITHUB_SHA"
-
-  # Kopia do huba Mysttic/Mysttic: stamtąd pobierają ludzie i stamtąd czyta aktualizacja
-  # w aplikacji, bo repozytorium z kodem jest prywatne. Tag ma przedrostek projektu, bo
-  # w hubie leżą wydania wszystkich projektów, a nazwy plików zostają bez zmian.
-  witryna:
-    name: Kopia na stronę
-    needs: [wersja, wydanie]
-    if: needs.wersja.outputs.wydajemy == 'true'
-    runs-on: ubuntu-latest
-    env:
-      HUB: Mysttic/Mysttic
-      PROJEKT: mysttic-audition
-      PRZEDROSTEK: mysttic-audition-v
-      NAZWA: Mysttic Audition
-      STRONA: https://mysttic.github.io/Mysttic/mysttic-audition/
-      WERSJA: ${{ needs.wersja.outputs.wersja }}
-      TAG: ${{ needs.wersja.outputs.tag }}
-      TAG_HUB: mysttic-audition-v${{ needs.wersja.outputs.wersja }}
-    steps:
-      # Domyślny GITHUB_TOKEN sięga tylko do tego repozytorium, więc kopia potrzebuje
-      # własnego poświadczenia (README, sekcja „Wydanie nowej wersji”).
-      - name: Poświadczenie do repozytorium z witryną
-        env:
-          HUB_TOKEN: ${{ secrets.HUB_TOKEN }}
-        run: |
-          set -uo pipefail
-          if [ -z "${HUB_TOKEN:-}" ]; then
-            echo "::error::Brak sekretu HUB_TOKEN. Wydanie $TAG powstało, kopia na stronę nie."
-            echo "::error::Potrzebny token osobisty z uprawnieniem Contents: read and write do $HUB."
-            exit 1
-          fi
-
-      - name: Pliki z wydania
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p kopia
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --dir kopia --pattern "$PROJEKT-*"
-          ls -la kopia
-          # Paczka i plik sum. Inna liczba znaczy, że wydanie wyszło niekompletne.
-          if [ "$(ls -1 kopia | wc -l)" -ne 2 ]; then
-            echo "::error::Spodziewałem się dwóch plików w wydaniu $TAG."
-            exit 1
-          fi
-          (cd kopia && sha256sum -c "$PROJEKT-$WERSJA-checksums.txt")
-
-      # Opis zostaje przy numerze i adresie strony: odnośniki do prywatnego repozytorium
-      # byłyby dla czytelnika ślepe.
-      - name: Opis wydania
-        run: |
-          set -euo pipefail
-          {
-            echo "$NAZWA $WERSJA"
-            echo
-            echo "$STRONA"
-          } > opis.md
-          cat opis.md
-
-      - name: Wydanie na stronie
-        env:
-          GH_TOKEN: ${{ secrets.HUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          # Powtórzony bieg ma zastąpić poprzednią kopię o tym samym numerze.
-          if gh release view "$TAG_HUB" --repo "$HUB" >/dev/null 2>&1; then
-            gh release delete "$TAG_HUB" --repo "$HUB" --cleanup-tag --yes
-          fi
-          gh release create "$TAG_HUB" kopia/* \
-            --repo "$HUB" \
-            --title "$NAZWA $WERSJA" \
-            --notes-file opis.md \
-            --target master
-
-      # Na stronie stoi jedna wersja, najnowsza; pełna historia zostaje w tym repozytorium.
-      # Cyfra po przedrostku chroni wydania projektów, których przedrostek zaczyna się tak samo.
-      - name: Strona trzyma jedną wersję
-        env:
-          GH_TOKEN: ${{ secrets.HUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          gh release list --repo "$HUB" --limit 100 --json tagName -q '.[].tagName' \
-            | { grep -E "^${PRZEDROSTEK}[0-9]" || true; } \
-            | { grep -vxF "$TAG_HUB" || true; } \
-            | while read -r stary; do
-                echo "Kasuję $stary"
-                gh release delete "$stary" --repo "$HUB" --cleanup-tag --yes
-              done
-          echo "Na stronie zostaje $TAG_HUB" >> "$GITHUB_STEP_SUMMARY"

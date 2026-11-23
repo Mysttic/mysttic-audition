@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://mysttic.github.io/Mysttic/mysttic-audition/"><b>Download</b></a>
+  <a href="https://github.com/Mysttic/mysttic-audition/releases/latest"><b>Download</b></a>
   &nbsp;·&nbsp; <a href="CHANGELOG.md">Changelog</a>
   &nbsp;·&nbsp; <a href="VERSION.md">Version</a>
 </p>
@@ -20,9 +20,17 @@
   <i>Wersja polska: <a href="README.pl.md">README.pl.md</a></i>
 </p>
 
+> **No longer actively developed.** Mysttic Audition works as it is, and its releases stay
+> available on the [Releases](https://github.com/Mysttic/mysttic-audition/releases) page of this
+> repository.
+
 ![Mysttic Audition with a recording open: the waveform with two fragments, the transcript and search results for the word "contract"](docs/screenshot.png)
 
 ## Features
+
+Open an audio or video file, read along as it is transcribed, search for a word or a phrase and
+play it from that exact moment. It is a reviewing tool, not an editor: it shows, finds, compares
+and cuts, and leaves every sample of the recording as it was.
 
 - **Audio and video, no conversion.** MP3, WAV, M4A, FLAC, OGG, OPUS, WMA, MP4, MKV, MOV, AVI,
   WEBM and more. The app extracts the audio track from a video by itself.
@@ -41,25 +49,33 @@
 - **English or Polish, whatever the recording.** The interface is in English by default, with
   Polish in Settings. The language of a recording is chosen for each file before it is
   transcribed, independently of the interface language.
-- **Updates.** Once a day, verified with SHA-256, installed at the next start.
+- **Updates.** Once a day from the releases of this repository, verified with SHA-256 and
+  installed at the next start or with one click. Your files, models and settings stay untouched.
 
 ## Installation
 
 Requirements:
 
-- Windows 10 or 11 with Microsoft Edge WebView2 (built into Windows 11);
+- 64-bit Windows 10 or 11 with Microsoft Edge WebView2, which draws the app's window (built into
+  Windows 11);
 - Python 3.10 or newer from [python.org](https://www.python.org/downloads/), including the
   "py launcher", which makes double-clicking `.pyw` files work;
 - about 2 GB of disk space for the dependencies and the default model;
 - an internet connection on the first start (dependencies) and for the first transcription
-  (the model, 1.6 GB).
+  (the model, 1.6 GB). After that the app works offline, apart from the daily update check.
 
 Steps:
 
 1. Download `mysttic-audition-<version>-windows.zip` from the
-   [project page](https://mysttic.github.io/Mysttic/mysttic-audition/) and unpack it anywhere.
+   [latest release](https://github.com/Mysttic/mysttic-audition/releases/latest) and unpack it
+   anywhere. The release also has `mysttic-audition-<version>-checksums.txt` with the SHA-256 of
+   the archive.
 2. Double-click `mysttic-audition.pyw`. The first start opens a console that installs the
-   dependencies (a few minutes), and then the app starts by itself.
+   dependencies into the app's own folder (`.venv`, a few minutes), and then the app starts by
+   itself.
+
+Already using 0.4.0 or older? Those copies do not see newer releases in the app, so install the
+new version by hand once, see [Updates](#updates).
 
 ## Usage
 
@@ -94,6 +110,9 @@ The interface language and the recording language are separate. The interface is
 by default; Polish is in Settings, General section, and the change applies at once, without a
 restart.
 
+Transcription works in Polish, English, German and the other languages Whisper knows: the
+dialog lists ten common ones, and "Detect automatically" covers the rest.
+
 The recording language is chosen for each file, in the dialog that opens when you add it and
 before anything is sent for transcription; "Transcribe again" opens the same dialog. "Detect
 automatically" lets Whisper recognise the language from the first 30 seconds of speech; choose
@@ -115,16 +134,29 @@ writes numbers as digits ("10%" rather than "ten percent"), so search for number
 ## Updates
 
 - Once a day (an option in Settings, Updates section, on by default) the app asks GitHub's
-  public API for the releases in [Mysttic/Mysttic](https://github.com/Mysttic/Mysttic/releases),
-  which the project page uses as well. No token and no data about the user or the computer.
-- It downloads a newer version only from `github.com/Mysttic/Mysttic/releases/download/`,
-  checks its size and SHA-256 checksum, unpacks it to `data/update/` and waits.
+  public API for the [releases of this repository](https://github.com/Mysttic/mysttic-audition/releases).
+  No token and no data about the user or the computer.
+- It downloads a newer version only from
+  `github.com/Mysttic/mysttic-audition/releases/download/`, over HTTPS, checks its size and
+  SHA-256 checksum, unpacks it to `data/update/` and waits. An archive with a path outside the
+  program files, for example into `data/` or `models/`, is rejected as a whole.
 - The launcher installs it at the next start, or right away with the "Restart and install"
   button. Only the program files are replaced: `data/`, `models/` and `.venv/` stay. When a new
   version changes the dependencies, the launcher installs them by itself.
 - A network error breaks nothing; the next attempt is an hour later.
 
+Copies up to 0.4.0 look for updates in a separate release hub, whose last release stays 0.4.0,
+so they never offer 0.5.0 or newer. Install the new version by hand once: close the app,
+download `mysttic-audition-<version>-windows.zip` from the
+[latest release](https://github.com/Mysttic/mysttic-audition/releases/latest) and copy the
+contents of its `mysttic-audition` folder over the app's folder, replacing the files. `data/`,
+`models/` and `.venv/` are not in the archive, so the library, the models and the settings stay.
+From then on the app updates itself from this repository.
+
 ## Data and privacy
+
+There is no account, no telemetry and no server of the author's in between. Reading,
+transcribing and cutting all happen on your computer.
 
 - `data/<id>/`: a copy of the original audio track (without the picture), a FLAC preview, the
   waveform and the transcript. The uploaded copy of the file is deleted once the audio is
@@ -134,8 +166,10 @@ writes numbers as digits ("10%" rather than "ten percent"), so search for number
   model, text scrolling), `data/aktualizacje.json` the update settings, and `data/app.log` the log. The
   Data section of Settings shows how much space the library and the models take and opens their
   folders.
-- The app connects to the internet only for the dependencies, the models and the release
-  information.
+- The app goes online for three things only: the Python packages on the first start, the speech
+  model on the first transcription, and once a day the list of releases from GitHub's API, with
+  no token and nothing about you or your computer. The update check can be turned off in
+  Settings, Updates section.
 
 ## For developers
 
@@ -143,7 +177,7 @@ writes numbers as digits ("10%" rather than "ten percent"), so search for number
 |---|---|
 | `mysttic-audition.pyw` | launcher: dependencies, installing updates, starting without a console |
 | `app.py` | server (FastAPI), audio (ffmpeg, PyAV), transcription, window (pywebview) |
-| `updates.py` | updates following the hub contract, standard library only |
+| `updates.py` | updates from the GitHub Releases of this repository, standard library only |
 | `static/` | interface (HTML, CSS, JS, translations in `i18n/`, wavesurfer.js in `vendor/`) and icon |
 | `instaluj.bat` | creates `.venv` and installs `requirements.txt` |
 | `tools/pakiet.py` | release package with a checksum file |
@@ -187,14 +221,8 @@ the code has a translation.
 1. Raise the number in [VERSION.md](VERSION.md).
 2. Add a `## [X.Y.Z] - YYYY-MM-DD` section to [CHANGELOG.md](CHANGELOG.md).
 3. Merge the changes into `main`. The [wydanie.yml](.github/workflows/wydanie.yml) workflow runs
-   the tests, builds the package with checksums, publishes the `vX.Y.Z` release and copies both
-   files to the hub as `mysttic-audition-vX.Y.Z`. From then on, the project page and the update
-   check in the app can see it.
-
-The repository needs a `HUB_TOKEN` secret, set once in Settings, Secrets and variables, Actions:
-a fine-grained personal access token, owner `Mysttic`, access to `Mysttic/Mysttic` only, with
-Contents: Read and write. The hub contract is described in
-[RELEASES.md](https://github.com/Mysttic/Mysttic/blob/master/RELEASES.md).
+   the tests, builds the package with checksums and publishes the `vX.Y.Z` release in this
+   repository. From then on, the update check in the app can see it.
 
 ## Third-party libraries
 

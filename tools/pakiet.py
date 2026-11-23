@@ -4,7 +4,7 @@
 
 W paczce są tylko pliki potrzebne do działania, w katalogu `mysttic-audition/`, bo tak
 rozpakowuje ją aktualizacja w aplikacji (updates.extract_package). Plik sum ma format
-sha256sum i obejmuje paczkę, zgodnie z kontraktem huba Mysttic/Mysttic.
+sha256sum i obejmuje paczkę; aktualizacja sprawdza nim paczkę przed rozpakowaniem.
 """
 from __future__ import annotations
 

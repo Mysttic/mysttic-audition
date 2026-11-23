@@ -16,14 +16,18 @@ sys.path.insert(0, str(ROOT))
 import updates  # noqa: E402
 
 PREFIX = updates.DOWNLOAD_PREFIX
+# Adresy wpisane wprost: testy pilnują źródła aktualizacji, a nie powtarzają stałych z updates.py.
+REPO_API = "https://api.github.com/repos/Mysttic/mysttic-audition/releases?per_page=100"
+REPO_DOWNLOADS = "https://github.com/Mysttic/mysttic-audition/releases/download/"
+HUB_DOWNLOADS = "https://github.com/Mysttic/Mysttic/releases/download/"  # dawny hub wydań, do 0.4.0
 
 
 def release(version, *, draft=False, prerelease=False, state="uploaded", tag=None, url_prefix=PREFIX, assets=None):
-    tag = tag or f"mysttic-audition-v{version}"
+    tag = tag or f"v{version}"
     names = assets if assets is not None else [updates.package_name(version), updates.checksums_name(version)]
     return {
         "tag_name": tag, "draft": draft, "prerelease": prerelease, "published_at": "2026-10-28T12:00:00Z",
-        "body": f"Mysttic Audition {version}\n\n{updates.SITE}",
+        "body": f"Mysttic Audition {version}",
         "assets": [{"name": n, "state": state, "size": 10, "browser_download_url": f"{url_prefix}{tag}/{n}"}
                    for n in names],
     }
@@ -60,13 +64,16 @@ class PickReleaseTests(unittest.TestCase):
     def test_takes_highest_version_not_first(self):
         picked = updates.pick_release([release("0.3.0"), release("0.10.0"), release("0.4.0")], "0.2.0")
         self.assertEqual(picked["version"], "0.10.0")
-        self.assertEqual(picked["package"]["url"], f"{PREFIX}mysttic-audition-v0.10.0/mysttic-audition-0.10.0-windows.zip")
+        self.assertEqual(picked["tag"], "v0.10.0")
+        self.assertEqual(picked["package"]["url"], f"{REPO_DOWNLOADS}v0.10.0/mysttic-audition-0.10.0-windows.zip")
+        self.assertEqual(picked["checksums"]["url"], f"{REPO_DOWNLOADS}v0.10.0/mysttic-audition-0.10.0-checksums.txt")
 
-    def test_ignores_other_projects_drafts_and_suffixes(self):
+    def test_ignores_other_tags_drafts_and_prereleases(self):
         releases = [
-            release("9.0.0", tag="chatt-v9.0.0"),
-            release("9.0.0", tag="mysttic-audition-viewer-v9.0.0"),
-            release("9.0.0", tag="mysttic-audition-v9.0.0-rc1"),
+            release("9.0.0", tag="mysttic-audition-v9.0.0"),  # postać tagu z dawnego huba
+            release("9.0.0", tag="v9.0.0-rc1"),
+            release("9.0.0", tag="9.0.0"),
+            release("9.0.0", tag="V9.0.0"),
             release("8.0.0", draft=True),
             release("7.0.0", prerelease=True),
         ]
@@ -82,8 +89,11 @@ class PickReleaseTests(unittest.TestCase):
     def test_missing_checksums_or_foreign_url_means_no_update(self):
         only_zip = release("0.3.0", assets=[updates.package_name("0.3.0")])
         foreign = release("0.3.0", url_prefix="https://example.com/download/")
-        self.assertIsNone(updates.pick_release([only_zip], "0.2.0"))
-        self.assertIsNone(updates.pick_release([foreign], "0.2.0"))
+        hub = release("0.3.0", url_prefix=HUB_DOWNLOADS)
+        other_repo = release("0.3.0", url_prefix="https://github.com/Mysttic/mysttic-audition-x/releases/download/")
+        for rel in (only_zip, foreign, hub, other_repo):
+            with self.subTest(assets=[a["browser_download_url"] for a in rel["assets"]]):
+                self.assertIsNone(updates.pick_release([rel], "0.2.0"))
 
     def test_garbage_response(self):
         self.assertIsNone(updates.pick_release({"message": "rate limited"}, "0.2.0"))
@@ -107,6 +117,76 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(updates.changelog_section(text, "0.3.0"), "Opis.\n\n### Dodane\n- A")
         self.assertEqual(updates.changelog_section(text, "0.2.0"), "B")
         self.assertEqual(updates.changelog_section(text, "9.9.9"), "")
+
+
+class FakeResponse(io.BytesIO):
+    """Odpowiedź serwera do podstawienia: treść, adres po przekierowaniach i obsługa `with`."""
+
+    def __init__(self, data, url):
+        super().__init__(data)
+        self.url = url
+
+    def geturl(self):
+        return self.url
+
+
+class SourceTests(unittest.TestCase):
+    """Wydania i pliki tylko z tego repozytorium, bez tokenu, z kontrolą rozmiaru i SHA-256."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.url = f"{REPO_DOWNLOADS}v0.5.0/{updates.package_name('0.5.0')}"
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_asks_this_repository_without_token(self):
+        with mock.patch.object(updates.urllib.request, "urlopen", return_value=FakeResponse(b"[]", REPO_API)) as urlopen:
+            self.assertEqual(updates.fetch_releases("mysttic-audition/0.5.0"), [])
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, REPO_API)
+        self.assertFalse(request.has_header("Authorization"))
+
+    def test_link_leads_to_releases_of_this_repository(self):
+        state = updates.Updater(self.tmp, "0.5.0", log=lambda *_: None).snapshot()
+        self.assertEqual(state["site"], "https://github.com/Mysttic/mysttic-audition/releases")
+
+    def test_downloads_only_from_this_repository(self):
+        name = updates.package_name("0.5.0")
+        for url in (f"{HUB_DOWNLOADS}mysttic-audition-v0.5.0/{name}",
+                    f"https://github.com/Mysttic/mysttic-audition-x/releases/download/v0.5.0/{name}",
+                    f"http://github.com/Mysttic/mysttic-audition/releases/download/v0.5.0/{name}",
+                    "https://github.com/Mysttic/mysttic-audition/archive/refs/tags/v0.5.0.zip"):
+            with self.subTest(url=url):
+                with mock.patch.object(updates._download_opener, "open", side_effect=AssertionError("bez sieci")), \
+                        self.assertRaises(updates.UpdateError) as caught:
+                    updates.download(url, self.tmp / name, "mysttic-audition/0.5.0")
+                self.assertEqual(caught.exception.problem, {"code": "update_bad_url", "repo": "Mysttic/mysttic-audition"})
+        self.assertEqual(list(self.tmp.iterdir()), [])
+
+    def test_download_checks_size_and_returns_sha256(self):
+        data = b"paczka" * 50_000
+        target = self.tmp / "paczka.zip"
+        landed = "https://release-assets.githubusercontent.com/github-production-release-asset/1"
+        with mock.patch.object(updates._download_opener, "open", return_value=FakeResponse(data, landed)) as opener:
+            digest = updates.download(self.url, target, "mysttic-audition/0.5.0", len(data))
+        self.assertEqual(opener.call_args.args[0].full_url, self.url)
+        self.assertEqual(digest, hashlib.sha256(data).hexdigest())
+        self.assertEqual(target.read_bytes(), data)
+        target.unlink()
+        with mock.patch.object(updates._download_opener, "open", return_value=FakeResponse(data, landed)), \
+                self.assertRaises(updates.UpdateError) as caught:
+            updates.download(self.url, target, "mysttic-audition/0.5.0", len(data) + 1)
+        self.assertEqual(caught.exception.problem, {"code": "update_size_mismatch", "received": len(data),
+                                                    "expected": len(data) + 1})
+        self.assertEqual(list(self.tmp.iterdir()), [])  # ani paczki, ani pliku .part
+
+    def test_download_refuses_redirect_outside_github(self):
+        with mock.patch.object(updates._download_opener, "open", return_value=FakeResponse(b"x", "https://example.com/x")), \
+                self.assertRaises(updates.UpdateError) as caught:
+            updates.download(self.url, self.tmp / "paczka.zip", "mysttic-audition/0.5.0")
+        self.assertEqual(caught.exception.problem["code"], "update_foreign_host")
+        self.assertEqual(list(self.tmp.iterdir()), [])
 
 
 class ExtractTests(unittest.TestCase):

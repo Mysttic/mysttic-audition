@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://mysttic.github.io/Mysttic/mysttic-audition/"><b>Pobierz</b></a>
+  <a href="https://github.com/Mysttic/mysttic-audition/releases/latest"><b>Pobierz</b></a>
   &nbsp;·&nbsp; <a href="CHANGELOG.md">Historia zmian</a> (po angielsku)
   &nbsp;·&nbsp; <a href="VERSION.md">Numer wersji</a>
 </p>
@@ -20,9 +20,17 @@
   <i>English version: <a href="README.md">README.md</a></i>
 </p>
 
+> **Projekt nie jest już aktywnie rozwijany.** Aplikacja działa w obecnej postaci, a jej wydania
+> zostają dostępne na stronie [Releases](https://github.com/Mysttic/mysttic-audition/releases)
+> tego repozytorium.
+
 ![Mysttic Audition z otwartym nagraniem: przebieg fali z dwoma fragmentami, transkrypcja i wyniki wyszukiwania słowa „umowa”](docs/zrzut.png)
 
 ## Co potrafi
+
+Otwierasz plik audio albo wideo, czytasz tekst w trakcie transkrypcji, szukasz słowa lub frazy
+i odtwarzasz nagranie dokładnie od tego miejsca. To narzędzie do przeglądania, nie edytor:
+pokazuje, znajduje, porównuje i przycina, a każdą próbkę nagrania zostawia taką, jaka była.
 
 - **Audio i wideo bez konwersji.** MP3, WAV, M4A, FLAC, OGG, OPUS, WMA, MP4, MKV, MOV, AVI,
   WEBM i inne. Ścieżkę dźwiękową z wideo aplikacja wyciąga sama.
@@ -40,26 +48,34 @@
 - **Po polsku albo po angielsku, niezależnie od nagrań.** Domyślnie interfejs jest po
   angielsku, polski włączysz w ustawieniach. Język nagrania wybierasz dla każdego pliku przed
   transkrypcją, bez względu na język interfejsu.
-- **Aktualizacje.** Raz na dobę, ze sprawdzeniem sumy SHA-256, instalacja przy następnym starcie.
+- **Aktualizacje.** Raz na dobę z wydań tego repozytorium, ze sprawdzeniem sumy SHA-256,
+  instalacja przy następnym starcie albo jednym kliknięciem. Pliki, modele i ustawienia zostają
+  nietknięte.
 
 ## Instalacja
 
 Wymagania:
 
-- Windows 10 lub 11 z Microsoft Edge WebView2 (w Windows 11 jest w systemie);
+- 64-bitowy Windows 10 lub 11 z Microsoft Edge WebView2, który rysuje okno aplikacji (w Windows
+  11 jest w systemie);
 - Python 3.10 lub nowszy z [python.org](https://www.python.org/downloads/), razem z „py
   launcher”, dzięki któremu działa dwuklik w pliki `.pyw`;
 - około 2 GB miejsca na zależności i domyślny model;
 - internet przy pierwszym uruchomieniu (zależności) i przy pierwszej transkrypcji (model, 1,6 GB).
+  Potem aplikacja działa bez internetu, poza codziennym sprawdzaniem aktualizacji.
 
 Kroki:
 
-1. Pobierz `mysttic-audition-<wersja>-windows.zip` ze
-   [strony projektu](https://mysttic.github.io/Mysttic/mysttic-audition/) i rozpakuj w wybranym
-   miejscu.
-2. Dwuklik `mysttic-audition.pyw`. Pierwszy start otwiera konsolę z instalacją zależności
-   (kilka minut), potem aplikacja uruchamia się sama.
+1. Pobierz `mysttic-audition-<wersja>-windows.zip` z
+   [najnowszego wydania](https://github.com/Mysttic/mysttic-audition/releases/latest) i rozpakuj
+   w wybranym miejscu. W wydaniu jest też `mysttic-audition-<wersja>-checksums.txt` z sumą
+   SHA-256 archiwum.
+2. Dwuklik `mysttic-audition.pyw`. Pierwszy start otwiera konsolę z instalacją zależności we
+   własnym folderze aplikacji (`.venv`, kilka minut), potem aplikacja uruchamia się sama.
 3. Interfejs jest po angielsku. Polski: Settings, sekcja General, Interface language: Polski.
+
+Masz wersję 0.4.0 lub starszą? Takie kopie nie widzą w aplikacji nowszych wydań, więc nową wersję
+trzeba raz zainstalować ręcznie, zob. [Aktualizacje](#aktualizacje).
 
 ## Obsługa
 
@@ -94,6 +110,9 @@ Język interfejsu i język nagrania to dwie osobne rzeczy. Domyślnie interfejs 
 angielsku; polski jest w ustawieniach, w sekcji Ogólne (General), i działa od razu, bez
 ponownego uruchamiania.
 
+Transkrypcja działa po polsku, angielsku, niemiecku i w innych językach, które zna Whisper:
+okienko podsuwa dziesięć popularnych, a „wykryj automatycznie” obejmuje pozostałe.
+
 Język nagrania wybierasz dla każdego pliku w okienku, które pokazuje się przy jego dodawaniu,
 zanim cokolwiek trafi do transkrypcji; „Transkrybuj ponownie” otwiera to samo okienko. Opcja
 „wykryj automatycznie” zostawia rozpoznanie języka Whisperowi, który ocenia pierwsze 30 sekund
@@ -115,16 +134,28 @@ Whisper zapisuje liczby cyframi („10%” zamiast „dziesięć procent”), wi
 ## Aktualizacje
 
 - Raz na dobę (opcja w ustawieniach, sekcja Aktualizacje, domyślnie włączona) aplikacja pyta
-  publiczne API GitHuba o wydania w [Mysttic/Mysttic](https://github.com/Mysttic/Mysttic/releases),
-  z których korzysta też strona projektu. Bez tokenu i bez danych o użytkowniku czy komputerze.
-- Nowszą wersję pobiera wyłącznie spod `github.com/Mysttic/Mysttic/releases/download/`,
-  sprawdza rozmiar i sumę SHA-256, rozpakowuje do `data/update/` i czeka.
+  publiczne API GitHuba o [wydania tego repozytorium](https://github.com/Mysttic/mysttic-audition/releases).
+  Bez tokenu i bez danych o użytkowniku czy komputerze.
+- Nowszą wersję pobiera wyłącznie spod `github.com/Mysttic/mysttic-audition/releases/download/`,
+  po HTTPS, sprawdza rozmiar i sumę SHA-256, rozpakowuje do `data/update/` i czeka. Archiwum ze
+  ścieżką spoza plików programu, na przykład do `data/` albo `models/`, jest odrzucane w całości.
 - Instaluje ją launcher przy następnym uruchomieniu albo od razu przycisk „Uruchom ponownie
   i zainstaluj”. Podmieniane są tylko pliki programu: `data/`, `models/` i `.venv/` zostają.
   Gdy nowa wersja zmienia zależności, launcher sam je doinstaluje.
 - Błąd sieci niczego nie psuje; kolejna próba za godzinę.
 
+Kopie do 0.4.0 szukają aktualizacji w osobnym hubie wydań, gdzie ostatnim wydaniem zostaje
+0.4.0, więc nigdy nie zaproponują 0.5.0 ani nowszej. Nową wersję zainstaluj raz ręcznie: zamknij
+aplikację, pobierz `mysttic-audition-<wersja>-windows.zip` z
+[najnowszego wydania](https://github.com/Mysttic/mysttic-audition/releases/latest) i skopiuj
+zawartość jego folderu `mysttic-audition` do folderu aplikacji, zastępując pliki. `data/`,
+`models/` i `.venv/` nie ma w archiwum, więc biblioteka, modele i ustawienia zostają. Od tej
+pory aplikacja aktualizuje się sama z tego repozytorium.
+
 ## Dane i prywatność
+
+Bez konta, bez telemetrii i bez żadnego serwera autora po drodze. Odczyt, transkrypcja
+i przycinanie odbywają się na tym komputerze.
 
 - `data/<id>/`: kopia oryginalnej ścieżki dźwiękowej (bez obrazu), podgląd FLAC, przebieg fali
   i transkrypcja. Przesłana kopia pliku jest usuwana po wyciągnięciu dźwięku, oryginał zostaje
@@ -132,7 +163,10 @@ Whisper zapisuje liczby cyframi („10%” zamiast „dziesięć procent”), wi
 - `data/ustawienia.json` to ustawienia (język interfejsu, domyślny język nagrań i model,
   przewijanie tekstu), `data/aktualizacje.json` ustawienia aktualizacji, a `data/app.log` dziennik. Sekcja
   Dane w ustawieniach pokazuje, ile zajmują biblioteka i modele, i otwiera ich foldery.
-- Z internetem aplikacja łączy się tylko po zależności, modele i informację o wydaniach.
+- Z internetem aplikacja łączy się tylko w trzech sprawach: pakiety Pythona przy pierwszym
+  uruchomieniu, model mowy przy pierwszej transkrypcji i raz na dobę lista wydań z API GitHuba,
+  bez tokenu i bez danych o Tobie czy komputerze. Sprawdzanie aktualizacji można wyłączyć
+  w ustawieniach, w sekcji Aktualizacje.
 
 ## Dla deweloperów
 
@@ -140,7 +174,7 @@ Whisper zapisuje liczby cyframi („10%” zamiast „dziesięć procent”), wi
 |---|---|
 | `mysttic-audition.pyw` | launcher: zależności, instalacja aktualizacji, start bez konsoli |
 | `app.py` | serwer (FastAPI), dźwięk (ffmpeg, PyAV), transkrypcja, okno (pywebview) |
-| `updates.py` | aktualizacje według kontraktu huba, tylko biblioteka standardowa |
+| `updates.py` | aktualizacje z GitHub Releases tego repozytorium, tylko biblioteka standardowa |
 | `static/` | interfejs (HTML, CSS, JS, tłumaczenia w `i18n/`, wavesurfer.js w `vendor/`) i ikona |
 | `instaluj.bat` | tworzy `.venv` i instaluje `requirements.txt` |
 | `tools/pakiet.py` | paczka wydania z plikiem sum |
@@ -182,13 +216,8 @@ liczby mnogiej oraz że każdy klucz i kod błędu użyty w kodzie ma tłumaczen
 1. Podnieś numer w [VERSION.md](VERSION.md).
 2. Dopisz sekcję `## [X.Y.Z] - RRRR-MM-DD` w [CHANGELOG.md](CHANGELOG.md) (po angielsku).
 3. Scal zmiany do `main`. Workflow [wydanie.yml](.github/workflows/wydanie.yml) uruchomi testy,
-   zbuduje paczkę z sumami, opublikuje wydanie `vX.Y.Z` i skopiuje oba pliki do huba jako
-   `mysttic-audition-vX.Y.Z`. Od tej chwili widzą je strona projektu i aktualizacja w aplikacji.
-
-Jednorazowo w ustawieniach repozytorium (Settings, Secrets and variables, Actions) potrzebny jest
-sekret `HUB_TOKEN`: token osobisty typu fine-grained, właściciel `Mysttic`, dostęp tylko do
-`Mysttic/Mysttic`, uprawnienie Contents: Read and write. Kontrakt huba opisuje
-[RELEASES.md](https://github.com/Mysttic/Mysttic/blob/master/RELEASES.md).
+   zbuduje paczkę z sumami i opublikuje wydanie `vX.Y.Z` w tym repozytorium. Od tej chwili widzi
+   je aktualizacja w aplikacji.
 
 ## Biblioteki zewnętrzne
 
